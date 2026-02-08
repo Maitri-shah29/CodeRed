@@ -75,16 +75,26 @@ function setupSocketHandlers(io) {
       
       socket.join(roomCode);
       
+      const serialized = serializeRoom(result);
+      console.log(`Player ${playerName} joined room ${roomCode}. Room now has ${serialized.players.length} players`);
+      
       callback({
         success: true,
         playerId,
-        room: serializeRoom(result)
+        room: serialized
       });
 
       // Notify others in room
       socket.to(roomCode).emit('playerJoined', {
         player: result.players.get(playerId),
-        room: serializeRoom(result)
+        room: serialized
+      });
+
+      // System message for chat
+      socket.to(roomCode).emit('chatMessage', {
+        username: 'System',
+        message: `${playerName} joined the lobby`,
+        color: '#00ff88'
       });
 
       console.log(`${playerName} joined room ${roomCode}`);
@@ -105,6 +115,27 @@ function setupSocketHandlers(io) {
         
         io.to(roomCode).emit('roomUpdated', {
           room: serializeRoom(room)
+        });
+
+        if (callback) callback({ success: true });
+      }
+    });
+
+    // CHAT MESSAGE
+    socket.on('chatMessage', ({ message }, callback) => {
+      const playerData = socketToPlayer.get(socket.id);
+      if (!playerData) return;
+
+      const { playerId, roomCode } = playerData;
+      const room = getRoom(roomCode);
+      if (!room) return;
+
+      const player = room.players.get(playerId);
+      if (player && message.trim()) {
+        io.to(roomCode).emit('chatMessage', {
+          username: player.name,
+          message: message,
+          color: '#ffffff'
         });
 
         if (callback) callback({ success: true });
@@ -268,6 +299,13 @@ function setupSocketHandlers(io) {
             playerId,
             room: serializeRoom(room)
           });
+
+          // System message for chat
+          io.to(roomCode).emit('chatMessage', {
+            username: 'System',
+            message: 'A player left the lobby',
+            color: '#ff3366'
+          });
         }
 
         socketToPlayer.delete(socket.id);
@@ -339,7 +377,12 @@ function handleEndRound(io, roomCode) {
  * Serialize room for client
  */
 function serializeRoom(room) {
-  return {
+  if (!room) {
+    console.error('serializeRoom called with null/undefined room');
+    return null;
+  }
+
+  const serialized = {
     code: room.code,
     hostId: room.hostId,
     players: Array.from(room.players.values()),
@@ -352,6 +395,10 @@ function serializeRoom(room) {
     scores: Object.fromEntries(room.scores),
     buzzedPlayer: room.buzzedPlayer
   };
+
+  console.log(`Serialized room ${room.code} with ${serialized.players.length} players`);
+  
+  return serialized;
 }
 
 module.exports = { setupSocketHandlers };
