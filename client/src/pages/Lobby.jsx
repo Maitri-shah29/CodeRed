@@ -432,7 +432,7 @@ export default function GameLobby() {
           min-height: 100vh;
           background: radial-gradient(ellipse at center, #1a1d3a 0%, #0a0d1f 70%, #000000 100%);
           color: #fff;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: '"Press Start 2P", "Courier New", monospace';
           position: relative;
           overflow: hidden;
         }
@@ -505,7 +505,7 @@ export default function GameLobby() {
         }
   
           .logo {
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;;
             font-size: 1.8rem;
             font-weight: 900;
             letter-spacing: 2px;
@@ -534,13 +534,14 @@ export default function GameLobby() {
             color: #666;
             font-size: 0.9rem;
             letter-spacing: 1px;
+            font-family: "Press Start 2P", "Courier New", monospace;
           }
   
           .room-code {
             color: #00ddff;
             font-weight: 700;
             font-size: 1rem;
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
           }
   
           .connection-status {
@@ -561,7 +562,7 @@ export default function GameLobby() {
           }
   
           .boom-btn, .exit-btn {
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
             font-weight: 700;
             padding: 0.6rem 1.5rem;
             border: 2px solid;
@@ -636,7 +637,7 @@ export default function GameLobby() {
           }
   
           .panel-header h2 {
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
             font-size: 1.3rem;
             color: #00ddff;
             letter-spacing: 2px;
@@ -697,7 +698,7 @@ export default function GameLobby() {
             justify-content: center;
             font-weight: 700;
             font-size: 1.1rem;
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
           }
   
           .player-info {
@@ -770,7 +771,7 @@ export default function GameLobby() {
             padding: 1rem;
             border-radius: 6px;
             border: 2px solid;
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
             font-weight: 700;
             font-size: 1rem;
             letter-spacing: 1px;
@@ -825,7 +826,7 @@ export default function GameLobby() {
           }
   
           .lobby-title {
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
             font-size: 4rem;
             font-weight: 900;
             color: #dd00ff;
@@ -872,7 +873,7 @@ export default function GameLobby() {
           }
   
           .role-content h3 {
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
             font-size: 1rem;
             margin-bottom: 0.5rem;
             letter-spacing: 1px;
@@ -907,7 +908,7 @@ export default function GameLobby() {
           }
   
           .settings-header h3 {
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
             font-size: 1rem;
             letter-spacing: 1px;
           }
@@ -922,6 +923,7 @@ export default function GameLobby() {
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
+            font-family: "Press Start 2P", "Courier New", monospace;
           }
   
           .setting-label {
@@ -969,7 +971,7 @@ export default function GameLobby() {
           }
   
           .chat-header h3 {
-            font-family: 'Orbitron', sans-serif;
+            font-family: "Press Start 2P", "Courier New", monospace;
             font-size: 1rem;
             letter-spacing: 1px;
           }
@@ -999,6 +1001,7 @@ export default function GameLobby() {
             margin-bottom: 0.6rem;
             font-size: 0.9rem;
             animation: messageSlide 0.3s ease;
+            
           }
   
           @keyframes messageSlide {
@@ -1033,7 +1036,7 @@ export default function GameLobby() {
             border-radius: 6px;
             padding: 0.8rem 1rem;
             color: #fff;
-            font-family: 'Share Tech Mono', monospace;
+            font-family: "Press Start 2P", "Courier New", monospace;
             font-size: 0.9rem;
             transition: all 0.3s ease;
           }
