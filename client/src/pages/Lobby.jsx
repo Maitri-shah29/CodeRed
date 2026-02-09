@@ -5,37 +5,44 @@ import socket from "../socket";
 
 /* ---------------- Constants ---------------- */
 
-const COLORS = ['#00ff88', '#00ddff', '#dd00ff', '#ffcc00', '#ff9900', '#ff3366'];
+const COLORS = [
+  "#00ff88",
+  "#00ddff",
+  "#dd00ff",
+  "#ffcc00",
+  "#ff9900",
+  "#ff3366",
+];
 
 const ROLES_INFO = [
-  { 
-    title: 'Fixers', 
-    description: 'Write clean code and catch the bugger before time runs out',
-    icon: '</>', 
-    color: '#00ddff',
-    bgColor: 'rgba(0, 221, 255, 0.05)'
+  {
+    title: "Fixers",
+    description: "Write clean code and catch the bugger before time runs out",
+    icon: "</>",
+    color: "#00ddff",
+    bgColor: "rgba(0, 221, 255, 0.05)",
   },
-  { 
-    title: 'SABOTEUR', 
-    description: 'Inject subtle bugs and survive until the timer ends',
-    icon: '🐛', 
-    color: '#ff3366',
-    bgColor: 'rgba(255, 51, 102, 0.05)'
+  {
+    title: "SABOTEUR",
+    description: "Inject subtle bugs and survive until the timer ends",
+    icon: "🐛",
+    color: "#ff3366",
+    bgColor: "rgba(255, 51, 102, 0.05)",
   },
-  { 
-    title: 'TIMER', 
-    description: '14 minutes to complete tasks and identify the bugger',
-    icon: '⏱', 
-    color: '#00ff88',
-    bgColor: 'rgba(0, 255, 136, 0.05)'
+  {
+    title: "TIMER",
+    description: "14 minutes to complete tasks and identify the bugger",
+    icon: "⏱",
+    color: "#00ff88",
+    bgColor: "rgba(0, 255, 136, 0.05)",
   },
-  { 
-    title: 'BUZZER', 
+  {
+    title: "BUZZER",
     description: "Press to accuse and review code. Wrong? You're penalized!",
-    icon: '🔔', 
-    color: '#ffcc00',
-    bgColor: 'rgba(255, 204, 0, 0.05)'
-  }
+    icon: "🔔",
+    color: "#ffcc00",
+    bgColor: "rgba(255, 204, 0, 0.05)",
+  },
 ];
 
 /* ---------------- Helpers ---------------- */
@@ -51,7 +58,7 @@ function normalizeRoom(room) {
     scores:
       room.scores instanceof Map
         ? Object.fromEntries(room.scores)
-        : room.scores ?? {},
+        : (room.scores ?? {}),
   };
 }
 
@@ -68,16 +75,20 @@ export default function GameLobby() {
   const navigate = useNavigate();
   const location = useLocation();
   const floatingShapesRef = useRef([
-    { type: 'star', x: 85, y: 15, duration: 20 },
-    { type: 'cube', x: 90, y: 65, duration: 25 },
-    { type: 'hex', x: 15, y: 80, duration: 18 },
-    { type: 'circle', x: 18, y: 45, duration: 22 },
+    { type: "star", x: 85, y: 15, duration: 20 },
+    { type: "cube", x: 90, y: 65, duration: 25 },
+    { type: "hex", x: 15, y: 80, duration: 18 },
+    { type: "circle", x: 18, y: 45, duration: 22 },
   ]);
 
   // Initialize state from location or localStorage
   const [room, setRoom] = useState(location.state?.room || null);
-  const [playerId, setPlayerId] = useState(location.state?.playerId || localStorage.getItem('codeRed_playerId'));
-  const [playerName, setPlayerName] = useState(location.state?.playerName || localStorage.getItem('codeRed_playerName'));
+  const [playerId, setPlayerId] = useState(
+    location.state?.playerId || localStorage.getItem("codeRed_playerId"),
+  );
+  const [playerName, setPlayerName] = useState(
+    location.state?.playerName || localStorage.getItem("codeRed_playerName"),
+  );
 
   const [message, setMessage] = useState("");
   const [chatMessages, setChatMessages] = useState([]);
@@ -97,7 +108,7 @@ export default function GameLobby() {
         ...p,
         color,
         bgColor: hexToRgba(color, 0.1),
-        border: color
+        border: color,
       };
     });
   }, [room]);
@@ -107,14 +118,32 @@ export default function GameLobby() {
 
   const readyCount = players.filter((p) => p.isReady).length;
   // const allPlayersReady = players.length >= 2 && players.every((p) => p.isReady); // Min 2 players logic
-  const allPlayersReady = players.length > 0 && players.every(p => p.isReady); // User's logic (simplified)
+  const allPlayersReady = players.length > 0 && players.every((p) => p.isReady); // User's logic (simplified)
 
   /* ---------------- Socket Lifecycle ---------------- */
 
+  // Intercept browser back navigation and trigger exit logic
   useEffect(() => {
-    const roomCode = location.state?.roomCode || localStorage.getItem('codeRed_roomCode');
-    const pid = location.state?.playerId || localStorage.getItem('codeRed_playerId');
-    const pname = location.state?.playerName || localStorage.getItem('codeRed_playerName');
+    const onPopState = (e) => {
+      e.preventDefault();
+      handleExitLobby();
+      // Push the current location again to prevent actual navigation
+      window.history.pushState(null, "", window.location.pathname);
+    };
+    window.history.pushState(null, "", window.location.pathname);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const roomCode =
+      location.state?.roomCode || localStorage.getItem("codeRed_roomCode");
+    const pid =
+      location.state?.playerId || localStorage.getItem("codeRed_playerId");
+    const pname =
+      location.state?.playerName || localStorage.getItem("codeRed_playerName");
 
     if (!roomCode || !pid || !pname) {
       navigate("/");
@@ -133,14 +162,14 @@ export default function GameLobby() {
     socket.on("connect", () => {
       setConnected(true);
       // Re-join logic if simple reconnect
-      socket.emit('joinRoom', { roomCode, playerName: pname }, (res) => {
+      socket.emit("joinRoom", { roomCode, playerName: pname }, (res) => {
         if (res.success) {
-           setRoom(normalizeRoom(res.room));
-           setPlayerId(res.playerId); 
+          setRoom(normalizeRoom(res.room));
+          setPlayerId(res.playerId);
         } else {
-           if (res.error === "Room not found") {
-             navigate("/");
-           }
+          if (res.error === "Room not found") {
+            navigate("/");
+          }
         }
       });
     });
@@ -162,7 +191,7 @@ export default function GameLobby() {
     });
 
     socket.on("playerLeft", ({ playerId: leftPlayerId, room }) => {
-       if (room) setRoom(normalizeRoom(room));
+      if (room) setRoom(normalizeRoom(room));
       setChatMessages((prev) => [
         ...prev,
         {
@@ -227,7 +256,7 @@ export default function GameLobby() {
   };
 
   const handleExitLobby = () => {
-    if (window.confirm('Are you sure you want to leave the lobby?')) {
+    if (window.confirm("Are you sure you want to leave the lobby?")) {
       socket.disconnect();
       navigate("/");
     }
@@ -237,7 +266,6 @@ export default function GameLobby() {
 
   return (
     <div className="game-lobby">
-
       {floatingShapesRef.current.map((shape, index) => (
         <div
           key={index}
@@ -245,13 +273,13 @@ export default function GameLobby() {
           style={{
             left: `${shape.x}%`,
             top: `${shape.y}%`,
-            animationDuration: `${shape.duration}s`
+            animationDuration: `${shape.duration}s`,
           }}
         >
-          {shape.type === 'star' && '⭐'}
-          {shape.type === 'cube' && '🟥'}
-          {shape.type === 'hex' && '⬡'}
-          {shape.type === 'circle' && '🟣'}
+          {shape.type === "star" && "⭐"}
+          {shape.type === "cube" && "🟥"}
+          {shape.type === "hex" && "⬡"}
+          {shape.type === "circle" && "🟣"}
         </div>
       ))}
 
@@ -259,7 +287,7 @@ export default function GameLobby() {
         <div className="error-banner">
           <AlertCircle size={20} />
           <span>{error}</span>
-          <button onClick={() => setError('')}>×</button>
+          <button onClick={() => setError("")}>×</button>
         </div>
       )}
 
@@ -271,23 +299,31 @@ export default function GameLobby() {
         <div className="header-room">
           <span className="room-label">ROOM:</span>
           <span className="room-code">{room?.code}</span>
-          <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}></span>
+          <span
+            className={`connection-status ${connected ? "connected" : "disconnected"}`}
+          ></span>
         </div>
         <div className="header-controls">
-          <button 
+          <button
             className="boom-btn"
             disabled={!allPlayersReady || startLoading || !isHost}
             onClick={handleStartGame}
-            title={!isHost ? 'Only host can start' : allPlayersReady ? 'Start the game' : 'Wait for all players'}
+            title={
+              !isHost
+                ? "Only host can start"
+                : allPlayersReady
+                  ? "Start the game"
+                  : "Wait for all players"
+            }
           >
-            {startLoading ? 'STARTING...' : 'START GAME'}
+            {startLoading ? "STARTING..." : "START GAME"}
           </button>
-          <button 
+          <button
             className="exit-btn"
             onClick={handleExitLobby}
             title="Leave the lobby"
           >
-            <LogOut size={18} style={{ marginRight: '0.5rem' }} />
+            <LogOut size={18} style={{ marginRight: "0.5rem" }} />
             EXIT
           </button>
         </div>
@@ -296,42 +332,53 @@ export default function GameLobby() {
       <div className="lobby-container">
         <div className="players-panel">
           <div className="panel-header">
-            <h2>PLAYERS ({readyCount}/{players.length})</h2>
-            <span className="player-count">{readyCount}/{players.length}</span>
+            <h2>
+              PLAYERS ({readyCount}/{players.length})
+            </h2>
+            <span className="player-count">
+              {readyCount}/{players.length}
+            </span>
           </div>
           <div className="players-list">
             {players.map((player) => (
-              <div 
-                key={player.id} 
-                className={`player-card ${player.id === playerId ? 'current-player' : ''}`}
-                style={{ 
+              <div
+                key={player.id}
+                className={`player-card ${player.id === playerId ? "current-player" : ""}`}
+                style={{
                   borderColor: player.border,
-                  background: player.bgColor
+                  background: player.bgColor,
                 }}
               >
-                <div className="player-avatar" style={{ background: player.color }}>
+                <div
+                  className="player-avatar"
+                  style={{ background: player.color }}
+                >
                   {player.name.substring(0, 2).toUpperCase()}
                 </div>
                 <div className="player-info">
                   <div className="player-role" style={{ color: player.color }}>
-                    {player.isHost ? 'HOST' : 'PLAYER'}
+                    {player.isHost ? "HOST" : "PLAYER"}
                   </div>
                   <div className="player-name">{player.name}</div>
                 </div>
-                <div 
-                  className={`player-status ${player.isReady ? 'ready' : 'waiting'}`}
-                  style={{ background: player.isReady ? '#00ff88' : '#666' }}
-                  title={player.isReady ? 'Ready' : 'Not ready'}
+                <div
+                  className={`player-status ${player.isReady ? "ready" : "waiting"}`}
+                  style={{ background: player.isReady ? "#00ff88" : "#666" }}
+                  title={player.isReady ? "Ready" : "Not ready"}
                 ></div>
               </div>
             ))}
           </div>
           {playerId && (
-            <button 
-              className={`ready-btn ${me?.isReady ? 'ready' : 'not-ready'}`}
+            <button
+              className={`ready-btn ${me?.isReady ? "ready" : "not-ready"}`}
               onClick={handleToggleReady}
             >
-              {readyLoading ? 'UPDATING...' : (me?.isReady ? '✓ READY' : 'NOT READY')}
+              {readyLoading
+                ? "UPDATING..."
+                : me?.isReady
+                  ? "✓ READY"
+                  : "NOT READY"}
             </button>
           )}
         </div>
@@ -339,17 +386,21 @@ export default function GameLobby() {
         <div className="lobby-panel">
           <div className="lobby-title-section">
             <h1 className="lobby-title">LOBBY</h1>
-            <p className="lobby-subtitle">{allPlayersReady ? 'All players ready! Host can start.' : 'Waiting for players to ready up...'}</p>
+            <p className="lobby-subtitle">
+              {allPlayersReady
+                ? "All players ready! Host can start."
+                : "Waiting for players to ready up..."}
+            </p>
           </div>
 
           <div className="roles-grid">
             {ROLES_INFO.map((role, idx) => (
-              <div 
-                key={idx} 
+              <div
+                key={idx}
                 className="role-card"
-                style={{ 
+                style={{
                   borderColor: role.color,
-                  background: role.bgColor
+                  background: role.bgColor,
                 }}
               >
                 <div className="role-icon" style={{ color: role.color }}>
@@ -408,7 +459,7 @@ export default function GameLobby() {
                 placeholder="Type message..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                onKeyPress={(e) => e.key === "Enter" && sendMessage()}
                 className="chat-input"
               />
               <button onClick={sendMessage} className="send-btn">
@@ -1085,6 +1136,6 @@ export default function GameLobby() {
             }
           }
         `}</style>
-      </div>
-    );
-  }
+    </div>
+  );
+}

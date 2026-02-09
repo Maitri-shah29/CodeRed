@@ -1,7 +1,9 @@
 // Socket.IO client setup
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001';
+const SOCKET_URL = process.env.REACT_APP_SERVER_URL;
+console.log(SOCKET_URL)
+console.log(process.env.REACT_APP_SERVER_URL)
 
 // Create socket instance
 const socket = io(SOCKET_URL, {

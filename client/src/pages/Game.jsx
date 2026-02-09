@@ -1,81 +1,104 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import socket from '../socket';
-import CodeEditor from '../components/CodeEditor';
-import { Bell, LogOut } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import socket from "../socket";
+import CodeEditor from "../components/CodeEditor";
+import { Bell, LogOut } from "lucide-react";
 
 function Game() {
+  // Intercept browser back navigation and trigger leave logic
+  useEffect(() => {
+    const onPopState = (e) => {
+      e.preventDefault();
+      handleLeaveRoom();
+      window.history.pushState(null, "", window.location.pathname);
+    };
+    window.history.pushState(null, "", window.location.pathname);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
   const navigate = useNavigate();
   const location = useLocation();
-  const { roomCode, playerId, playerName, room: initialRoom } = location.state || {};
+  const {
+    roomCode,
+    playerId,
+    playerName,
+    room: initialRoom,
+  } = location.state || {};
 
   const [room, setRoom] = useState(initialRoom);
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState("");
   const [timeRemaining, setTimeRemaining] = useState(90);
   const [buzzedPlayerName, setBuzzedPlayerName] = useState(null);
   const [showFixModal, setShowFixModal] = useState(false);
-  const [fixedCode, setFixedCode] = useState('');
+  const [fixedCode, setFixedCode] = useState("");
   const [feedback, setFeedback] = useState(null);
 
   useEffect(() => {
     if (!roomCode || !playerId || !room) {
-      navigate('/');
+      navigate("/");
       return;
     }
 
     if (room.currentCode) {
-      if (getCurrentPlayer()?.role === 'bugger') {
+      if (getCurrentPlayer()?.role === "bugger") {
         setCode(room.currentCode.currentBug.buggedCode);
       } else {
         setCode(room.currentCode.currentBug.buggedCode);
       }
     }
 
-    socket.on('timerUpdate', ({ remaining }) => {
+    socket.on("timerUpdate", ({ remaining }) => {
       setTimeRemaining(remaining);
     });
 
-    socket.on('playerBuzzed', ({ playerId: buzzerId, playerName }) => {
+    socket.on("playerBuzzed", ({ playerId: buzzerId, playerName }) => {
       setBuzzedPlayerName(playerName);
-      
+
       if (buzzerId === playerId) {
         setShowFixModal(true);
         setFixedCode(code);
       }
     });
 
-    socket.on('codeUpdated', ({ code: newCode }) => {
+    socket.on("codeUpdated", ({ code: newCode }) => {
       setCode(newCode);
     });
 
-    socket.on('fixSubmitted', ({ playerId: submitterId, isCorrect, correctCode, bugDescription }) => {
-      setFeedback({
-        isCorrect,
-        correctCode,
-        bugDescription,
-        submittedBy: submitterId
-      });
-      setBuzzedPlayerName(null);
-      setShowFixModal(false);
+    socket.on(
+      "fixSubmitted",
+      ({ playerId: submitterId, isCorrect, correctCode, bugDescription }) => {
+        setFeedback({
+          isCorrect,
+          correctCode,
+          bugDescription,
+          submittedBy: submitterId,
+        });
+        setBuzzedPlayerName(null);
+        setShowFixModal(false);
 
-      setTimeout(() => {
-        setFeedback(null);
-      }, 5000);
-    });
+        setTimeout(() => {
+          setFeedback(null);
+        }, 5000);
+      },
+    );
 
-    socket.on('roundEnded', ({ room: updatedRoom }) => {
+    socket.on("roundEnded", ({ room: updatedRoom }) => {
       setRoom(updatedRoom);
     });
 
-    socket.on('roundStarted', ({ room: updatedRoom }) => {
+    socket.on("roundStarted", ({ room: updatedRoom }) => {
       setRoom(updatedRoom);
       setBuzzedPlayerName(null);
       setShowFixModal(false);
       setFeedback(null);
-      
+
       if (updatedRoom.currentCode) {
-        const currentPlayer = updatedRoom.players.find((p) => p.id === playerId);
-        if (currentPlayer?.role === 'bugger') {
+        const currentPlayer = updatedRoom.players.find(
+          (p) => p.id === playerId,
+        );
+        if (currentPlayer?.role === "bugger") {
           setCode(updatedRoom.currentCode.currentBug.buggedCode);
         } else {
           setCode(updatedRoom.currentCode.currentBug.buggedCode);
@@ -83,30 +106,30 @@ function Game() {
       }
     });
 
-    socket.on('gameEnded', ({ room: updatedRoom }) => {
-      navigate('/result', {
+    socket.on("gameEnded", ({ room: updatedRoom }) => {
+      navigate("/result", {
         state: {
           roomCode,
           playerId,
           playerName,
-          room: updatedRoom
-        }
+          room: updatedRoom,
+        },
       });
     });
 
-    socket.on('playerLeft', ({ room: updatedRoom }) => {
+    socket.on("playerLeft", ({ room: updatedRoom }) => {
       setRoom(updatedRoom);
     });
 
     return () => {
-      socket.off('timerUpdate');
-      socket.off('playerBuzzed');
-      socket.off('codeUpdated');
-      socket.off('fixSubmitted');
-      socket.off('roundEnded');
-      socket.off('roundStarted');
-      socket.off('gameEnded');
-      socket.off('playerLeft');
+      socket.off("timerUpdate");
+      socket.off("playerBuzzed");
+      socket.off("codeUpdated");
+      socket.off("fixSubmitted");
+      socket.off("roundEnded");
+      socket.off("roundStarted");
+      socket.off("gameEnded");
+      socket.off("playerLeft");
     };
   }, [roomCode, playerId, navigate, room, code, playerName]);
 
@@ -115,47 +138,47 @@ function Game() {
   };
 
   const handleBuzz = () => {
-    socket.emit('buzz', (response) => {
+    socket.emit("buzz", (response) => {
       if (!response.success) {
-        alert(response.error || 'Failed to buzz');
+        alert(response.error || "Failed to buzz");
       }
     });
   };
 
   const handleSubmitFix = () => {
-    socket.emit('submitFix', { fixedCode }, (response) => {
+    socket.emit("submitFix", { fixedCode }, (response) => {
       if (!response.success) {
-        alert('Failed to submit fix');
+        alert("Failed to submit fix");
       }
     });
   };
 
   const handleCodeChange = (newCode) => {
     setCode(newCode);
-    
-    if (getCurrentPlayer()?.role === 'bugger') {
-      socket.emit('submitBug', { buggedCode: newCode });
+
+    if (getCurrentPlayer()?.role === "bugger") {
+      socket.emit("submitBug", { buggedCode: newCode });
     }
   };
 
   const handleLeaveRoom = () => {
-    if (window.confirm('Are you sure you want to leave the game?')) {
+    if (window.confirm("Are you sure you want to leave the game?")) {
       socket.disconnect();
-      navigate('/');
+      navigate("/");
     }
   };
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
   if (!room) {
     return (
       <div className="game-container">
         <div className="loading">Loading game...</div>
-        <style jsx>{`
+        <style>{`
           .game-container {
             min-height: 100vh;
             background: #0a0e27;
@@ -166,7 +189,7 @@ function Game() {
           .loading {
             color: #00ff88;
             font-size: 20px;
-            font-family: 'Share Tech Mono', monospace;
+            font-family: "Share Tech Mono", monospace;
           }
         `}</style>
       </div>
@@ -174,17 +197,23 @@ function Game() {
   }
 
   const currentPlayer = getCurrentPlayer();
-  const isBugger = currentPlayer?.role === 'bugger';
+  const isBugger = currentPlayer?.role === "bugger";
   const canBuzz = !isBugger && !buzzedPlayerName;
 
-  const bugsList = room.currentCode?.currentBug ? [
-    { id: 1, title: 'Off-by-one error', location: 'calculateTotal loop' },
-    { id: 2, title: 'Missing async/await', location: 'fetchUserData' },
-    { id: 3, title: 'No input sanitization', location: 'sanitizeInput' },
-    { id: 4, title: 'Potential prototype pollution', location: 'mergeObjects' }
-  ] : [];
+  const bugsList = room.currentCode?.currentBug
+    ? [
+        { id: 1, title: "Off-by-one error", location: "calculateTotal loop" },
+        { id: 2, title: "Missing async/await", location: "fetchUserData" },
+        { id: 3, title: "No input sanitization", location: "sanitizeInput" },
+        {
+          id: 4,
+          title: "Potential prototype pollution",
+          location: "mergeObjects",
+        },
+      ]
+    : [];
 
-  const playerColors = ['#00ddff', '#00ff88', '#dd00ff', '#ffcc00'];
+  const playerColors = ["#00ddff", "#00ff88", "#dd00ff", "#ffcc00"];
 
   return (
     <div className="game-container">
@@ -195,7 +224,9 @@ function Game() {
         </div>
         <div className="right">
           <span className="room-code">ROOM: #{roomCode}</span>
-          <span className="role-badge">{isBugger ? 'BUGGER' : 'DEVELOPER'}</span>
+          <span className="role-badge">
+            {isBugger ? "BUGGER" : "DEVELOPER"}
+          </span>
         </div>
       </div>
 
@@ -233,7 +264,7 @@ function Game() {
               <span>BUGS TO REMOVE</span>
             </div>
             <div className="bugs-list">
-              {bugsList.map(bug => (
+              {bugsList.map((bug) => (
                 <div key={bug.id} className="bug-item">
                   <span className="bug-icon">🐛</span>
                   <div className="bug-info">
@@ -252,7 +283,9 @@ function Game() {
                 <span>DEVELOPER TOOLS</span>
               </div>
               <div className="tools-content">
-                <p className="tools-text">You have ONE chance to reveal a bug:</p>
+                <p className="tools-text">
+                  You have ONE chance to reveal a bug:
+                </p>
                 <button className="reveal-btn">
                   <span className="icon">👁</span>
                   REVEAL BUG
@@ -268,9 +301,12 @@ function Game() {
               <CodeEditor
                 code={code}
                 onChange={handleCodeChange}
-                readOnly={!isBugger && !showFixModal}
                 language={room.currentCode.language}
                 height="calc(100vh - 180px)"
+                roomCode={roomCode}
+                playerId={playerId}
+                playerName={playerName}
+                playerColor={playerColors[room.players.findIndex(p => p.id === playerId) % playerColors.length] || '#00ff88'}
               />
             )}
           </div>
@@ -280,16 +316,16 @@ function Game() {
       {!isBugger && (
         <div className="buzzer-section">
           <button
-            className={`buzzer-button ${!canBuzz ? 'disabled' : ''}`}
+            className={`buzzer-button ${!canBuzz ? "disabled" : ""}`}
             onClick={handleBuzz}
             disabled={!canBuzz}
           >
             <Bell size={40} />
           </button>
           <div className="buzzer-text">
-            {buzzedPlayerName 
-              ? `${buzzedPlayerName} is fixing...` 
-              : 'Press to pause & start voting'}
+            {buzzedPlayerName
+              ? `${buzzedPlayerName} is fixing...`
+              : "Press to pause & start voting"}
           </div>
           <button className="leave-btn" onClick={handleLeaveRoom}>
             <LogOut size={18} />
@@ -313,7 +349,10 @@ function Game() {
               <button onClick={handleSubmitFix} className="submit-btn">
                 Submit Fix
               </button>
-              <button onClick={() => setShowFixModal(false)} className="cancel-btn">
+              <button
+                onClick={() => setShowFixModal(false)}
+                className="cancel-btn"
+              >
                 Cancel
               </button>
             </div>
@@ -322,9 +361,9 @@ function Game() {
       )}
 
       {feedback && (
-        <div className={`feedback ${feedback.isCorrect ? 'success' : 'error'}`}>
+        <div className={`feedback ${feedback.isCorrect ? "success" : "error"}`}>
           <div className="feedback-title">
-            {feedback.isCorrect ? '✅ Correct Fix!' : '❌ Incorrect Fix'}
+            {feedback.isCorrect ? "✅ Correct Fix!" : "❌ Incorrect Fix"}
           </div>
           <div className="feedback-text">
             <strong>Bug:</strong> {feedback.bugDescription}
@@ -333,13 +372,13 @@ function Game() {
       )}
 
       <style jsx>{`
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        @import url("https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap");
 
         .game-container {
           min-height: 100vh;
           background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
           color: #00ff88;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: "Share Tech Mono", monospace;
           position: relative;
           overflow: hidden;
         }
@@ -420,7 +459,8 @@ function Game() {
           gap: 20px;
         }
 
-        .bugs-panel, .tools-panel {
+        .bugs-panel,
+        .tools-panel {
           border: 2px solid #00ff88;
           border-radius: 8px;
           background: rgba(0, 255, 136, 0.05);
@@ -506,7 +546,7 @@ function Game() {
           color: #dd00ff;
           padding: 12px;
           border-radius: 5px;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: "Share Tech Mono", monospace;
           font-size: 12px;
           font-weight: bold;
           cursor: pointer;
@@ -612,21 +652,28 @@ function Game() {
           height: 120px;
           border-radius: 50%;
           border: 4px solid #ff3366;
-          background: radial-gradient(circle, #ff6b6b 0%, #ff3366 50%, #cc0033 100%);
+          background: radial-gradient(
+            circle,
+            #ff6b6b 0%,
+            #ff3366 50%,
+            #cc0033 100%
+          );
           color: white;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
           transition: all 0.3s ease;
-          box-shadow: 0 0 40px rgba(255, 51, 102, 0.6),
-                      inset 0 0 20px rgba(255, 255, 255, 0.2);
+          box-shadow:
+            0 0 40px rgba(255, 51, 102, 0.6),
+            inset 0 0 20px rgba(255, 255, 255, 0.2);
         }
 
         .buzzer-button:hover:not(.disabled) {
           transform: scale(1.05);
-          box-shadow: 0 0 50px rgba(255, 51, 102, 0.8),
-                      inset 0 0 25px rgba(255, 255, 255, 0.3);
+          box-shadow:
+            0 0 50px rgba(255, 51, 102, 0.8),
+            inset 0 0 25px rgba(255, 255, 255, 0.3);
         }
 
         .buzzer-button:active:not(.disabled) {
@@ -654,7 +701,7 @@ function Game() {
           color: #ff3366;
           padding: 10px 20px;
           border-radius: 5px;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: "Share Tech Mono", monospace;
           font-size: 11px;
           cursor: pointer;
           display: flex;
@@ -711,11 +758,12 @@ function Game() {
           margin-top: 20px;
         }
 
-        .submit-btn, .cancel-btn {
+        .submit-btn,
+        .cancel-btn {
           flex: 1;
           padding: 15px;
           border-radius: 5px;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: "Share Tech Mono", monospace;
           font-size: 14px;
           font-weight: bold;
           cursor: pointer;

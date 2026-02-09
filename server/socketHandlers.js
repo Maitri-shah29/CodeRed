@@ -238,17 +238,66 @@ function setupSocketHandlers(io) {
       const room = getRoom(roomCode);
 
       if (!room || room.bugger !== playerId) {
-        return callback({ success: false, error: 'Only bugger can submit bugs' });
+        if (callback) return callback({ success: false, error: 'Only bugger can submit bugs' });
+        return;
       }
 
       // Update the bugged code
       room.currentCode.buggedCode = buggedCode;
 
-      callback({ success: true });
+      if (callback) callback({ success: true });
 
       // Notify debuggers that code was updated
       socket.to(roomCode).emit('codeUpdated', {
         code: buggedCode
+      });
+    });
+
+    // CODE CHANGE (real-time sync for collaborative editing)
+    socket.on('codeChange', ({ content }) => {
+      const playerData = socketToPlayer.get(socket.id);
+      if (!playerData) return;
+
+      const { playerId, roomCode } = playerData;
+      const room = getRoom(roomCode);
+      if (!room) return;
+
+      // Update room's current code if applicable
+      if (room.currentCode) {
+        room.currentCode.buggedCode = content;
+      }
+
+      // Broadcast to all other players in the room
+      socket.to(roomCode).emit('codeUpdated', {
+        code: content,
+        fromPlayerId: playerId
+      });
+    });
+
+    // CURSOR UPDATE (broadcast cursor position to other players)
+    socket.on('cursorUpdate', ({ position }) => {
+      const playerData = socketToPlayer.get(socket.id);
+      if (!playerData) return;
+
+      const { playerId, roomCode } = playerData;
+      const room = getRoom(roomCode);
+      if (!room) return;
+
+      // Get player info for color assignment
+      const player = room.players.get(playerId);
+      if (!player) return;
+
+      // Find player index for color
+      const playerIndex = Array.from(room.players.keys()).indexOf(playerId);
+      const colors = ['#00ddff', '#00ff88', '#dd00ff', '#ffcc00', '#ff9900', '#ff3366'];
+      const playerColor = colors[playerIndex % colors.length];
+
+      // Broadcast cursor position to all other players
+      socket.to(roomCode).emit('cursorMoved', {
+        playerId,
+        playerName: player.name,
+        position,
+        color: playerColor
       });
     });
 

@@ -1,26 +1,215 @@
-// CodeEditor component
-import React, { useRef, useState, useEffect } from 'react';
+// CodeEditor component with simplified Yjs CRDT collaborative editing
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
+import * as Y from 'yjs';
+
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+const WS_URL = SERVER_URL.replace('http://', 'ws://').replace('https://', 'wss://');
+
+// Message types (must match server)
+const MSG_SYNC_REQUEST = 0;
+const MSG_SYNC_RESPONSE = 1;
+const MSG_UPDATE = 2;
+const MSG_AWARENESS = 3;
 
 function CodeEditor({ 
   code, 
   onChange, 
   readOnly = false, 
   language = 'javascript',
-  height = '720px'
+  height = '720px',
+  roomCode = null,
+  playerId = null,
+  playerName = 'Anonymous',
+  playerColor = '#00ff88'
 }) {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
+  const ydocRef = useRef(null);
+  const wsRef = useRef(null);
+  const yTextRef = useRef(null);
+  const isLocalChangeRef = useRef(false);
+  const initialCodeRef = useRef(code); // Store initial code
+  
   const [locked, setLocked] = useState(false);
-  const [lastCode, setLastCode] = useState(code || '');
-  const [messages, setMessages] = useState([]);
-  const decorationIdsRef = useRef([]);
+  const [connected, setConnected] = useState(false);
+  const [remoteCursors, setRemoteCursors] = useState({});
+
+  // Update editor content from Yjs
+  const updateEditorContent = useCallback(() => {
+    if (editorRef.current && yTextRef.current) {
+      const newContent = yTextRef.current.toString();
+      const currentContent = editorRef.current.getValue();
+      
+      if (newContent !== currentContent) {
+        isLocalChangeRef.current = true;
+        const position = editorRef.current.getPosition();
+        editorRef.current.setValue(newContent);
+        if (position) {
+          editorRef.current.setPosition(position);
+        }
+        isLocalChangeRef.current = false;
+        
+        if (onChange) {
+          onChange(newContent);
+        }
+      }
+    }
+  }, [onChange]);
+
+  // Setup WebSocket connection for Yjs - only depends on roomCode, playerId, playerName, playerColor
+  useEffect(() => {
+    if (!roomCode) return;
+
+    const ydoc = new Y.Doc();
+    ydocRef.current = ydoc;
+    const yText = ydoc.getText('code');
+    yTextRef.current = yText;
+
+    // Initialize with code if provided
+    if (initialCodeRef.current && yText.length === 0) {
+      yText.insert(0, initialCodeRef.current);
+    }
+
+    const wsUrl = `${WS_URL}/yjs/${roomCode}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('Yjs WebSocket connected');
+      setConnected(true);
+      
+      // Request initial sync
+      ws.send(JSON.stringify({ type: MSG_SYNC_REQUEST }));
+      
+      // Send awareness
+      if (playerId) {
+        ws.send(JSON.stringify({
+          type: MSG_AWARENESS,
+          playerId,
+          state: { name: playerName, color: playerColor }
+        }));
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        switch (data.type) {
+          case MSG_SYNC_RESPONSE:
+            if (data.state) {
+              const update = new Uint8Array(data.state);
+              Y.applyUpdate(ydoc, update);
+              // Update editor after applying sync
+              if (editorRef.current && yTextRef.current) {
+                const newContent = yTextRef.current.toString();
+                if (newContent && editorRef.current.getValue() !== newContent) {
+                  isLocalChangeRef.current = true;
+                  editorRef.current.setValue(newContent);
+                  isLocalChangeRef.current = false;
+                }
+              }
+            }
+            break;
+          
+          case MSG_UPDATE:
+            if (data.update) {
+              const update = new Uint8Array(data.update);
+              Y.applyUpdate(ydoc, update);
+              // Update editor after applying update
+              if (editorRef.current && yTextRef.current) {
+                const newContent = yTextRef.current.toString();
+                if (editorRef.current.getValue() !== newContent) {
+                  isLocalChangeRef.current = true;
+                  const position = editorRef.current.getPosition();
+                  editorRef.current.setValue(newContent);
+                  if (position) editorRef.current.setPosition(position);
+                  isLocalChangeRef.current = false;
+                }
+              }
+            }
+            break;
+          
+          case MSG_AWARENESS:
+            if (data.playerId && data.playerId !== playerId) {
+              setRemoteCursors(prev => ({
+                ...prev,
+                [data.playerId]: data.state
+              }));
+            } else if (data.states) {
+              const filtered = Object.fromEntries(
+                Object.entries(data.states).filter(([id]) => id !== playerId)
+              );
+              setRemoteCursors(filtered);
+            }
+            break;
+            
+          default:
+            break;
+        }
+      } catch (err) {
+        console.error('Yjs message parse error:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('Yjs WebSocket disconnected');
+      setConnected(false);
+    };
+
+    ws.onerror = (err) => {
+      console.error('Yjs WebSocket error:', err);
+      setConnected(false);
+    };
+
+    // Listen for local document changes
+    const updateHandler = (update, origin) => {
+      if (origin !== 'remote' && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: MSG_UPDATE,
+          update: Array.from(update)
+        }));
+      }
+    };
+    ydoc.on('update', updateHandler);
+
+    return () => {
+      ydoc.off('update', updateHandler);
+      ws.close();
+      ydoc.destroy();
+    };
+  }, [roomCode, playerId, playerName, playerColor]); // Removed code and updateEditorContent
 
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+
+    // Set initial content from Yjs if available
+    if (yTextRef.current && yTextRef.current.length > 0) {
+      editor.setValue(yTextRef.current.toString());
+    }
   };
 
+  const handleEditorChange = (value) => {
+    if (locked || isLocalChangeRef.current) return;
+    
+    if (yTextRef.current && ydocRef.current) {
+      const currentContent = yTextRef.current.toString();
+      if (value !== currentContent) {
+        ydocRef.current.transact(() => {
+          yTextRef.current.delete(0, yTextRef.current.length);
+          yTextRef.current.insert(0, value);
+        });
+      }
+    }
+    
+    if (onChange) {
+      onChange(value);
+    }
+  };
+
+  // Add decoration styles
   useEffect(() => {
     if (!document.getElementById('code-editor-decor')) {
       const style = document.createElement('style');
@@ -34,54 +223,93 @@ function CodeEditor({
     }
   }, []);
 
-  const applyHighlights = (highlights = []) => {
-    const monaco = monacoRef.current;
-    const editor = editorRef.current;
-    if (!monaco || !editor) return;
-
-    const decorations = highlights.map(h => {
-      const className = h.type === 'error' ? 'myErrorLine' : (h.type === 'warning' ? 'myWarnLine' : 'myInfoLine');
-      return {
-        range: new monaco.Range(h.line, 1, h.line, 1),
-        options: {
-          isWholeLine: true,
-          linesDecorationsClassName: className,
-          hoverMessage: { value: h.reason || '' }
-        }
-      };
-    });
-
-    decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, decorations);
-  };
-
-  const handleEditorChange = (value) => {
-    // Prevent editing if locked
-    if (locked) {
-      // revert to last known good code
-      if (editorRef.current) {
-        editorRef.current.setValue(lastCode);
-      }
-      return;
-    }
-
-    setLastCode(value);
-    if (onChange) onChange(value);
-  };
-
   const validateRemote = async () => {
-    const payload = { code: editorRef.current ? editorRef.current.getValue() : lastCode };
+    const currentCode = yTextRef.current 
+      ? yTextRef.current.toString() 
+      : (editorRef.current ? editorRef.current.getValue() : '');
+    
     try {
-      const res = await fetch('http://localhost:3001/validate', {
+      const res = await fetch(`${SERVER_URL}/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ code: currentCode })
       });
       const json = await res.json();
-      const combined = [ ...(json.errors || []), ...(json.warnings || []) ];
-      setMessages(combined.map(m => ({ ...m })));
-      if (json.highlights) applyHighlights(json.highlights);
+      console.log('Validation result:', json);
     } catch (err) {
-      setMessages([{ message: 'Validation request failed', details: err.message }]);
+      console.error('Validation failed:', err);
+    }
+  };
+
+  const styles = {
+    container: {
+      backgroundColor: '#1e1e1e',
+      borderRadius: '8px',
+      overflow: 'hidden',
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column'
+    },
+    editorHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '10px 16px',
+      backgroundColor: '#1f2937',
+      color: 'white',
+      borderBottom: '1px solid #374151'
+    },
+    editorTitle: {
+      fontSize: '12px',
+      fontWeight: '600',
+      color: '#00ff88'
+    },
+    language: {
+      fontSize: '10px',
+      padding: '3px 6px',
+      backgroundColor: '#374151',
+      borderRadius: '4px',
+      textTransform: 'uppercase',
+      color: '#999'
+    },
+    connectionStatus: {
+      fontSize: '10px',
+      padding: '3px 8px',
+      borderRadius: '4px',
+      backgroundColor: connected ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 51, 102, 0.2)',
+      color: connected ? '#00ff88' : '#ff3366',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px'
+    },
+    btn: {
+      padding: '4px 10px',
+      fontSize: '10px',
+      background: 'rgba(0,255,136,0.1)',
+      border: '1px solid #00ff88',
+      color: '#00ff88',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    },
+    editorWrapper: {
+      backgroundColor: '#1e1e1e',
+      flex: 1,
+      minHeight: 0
+    },
+    remoteCursorsInfo: {
+      display: 'flex',
+      gap: '8px',
+      flexWrap: 'wrap'
+    },
+    cursorBadge: {
+      fontSize: '10px',
+      padding: '2px 6px',
+      borderRadius: '3px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px'
     }
   };
 
@@ -91,12 +319,44 @@ function CodeEditor({
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <span style={styles.editorTitle}>Code Editor</span>
           <span style={styles.language}>{language}</span>
-          <button onClick={() => { setLocked(s => !s); }} style={styles.btn}>{locked ? 'Unlock' : 'Lock'}</button>
-          <button onClick={validateRemote} style={styles.btn}>Validate</button>
+          {roomCode && (
+            <span style={styles.connectionStatus}>
+              <span style={{ 
+                width: 6, 
+                height: 6, 
+                borderRadius: '50%', 
+                backgroundColor: connected ? '#00ff88' : '#ff3366' 
+              }}></span>
+              {connected ? 'LIVE' : 'CONNECTING...'}
+            </span>
+          )}
+          {!readOnly && (
+            <>
+              <button onClick={() => { setLocked(s => !s); }} style={styles.btn}>
+                {locked ? 'Unlock' : 'Lock'}
+              </button>
+              <button onClick={validateRemote} style={styles.btn}>Validate</button>
+            </>
+          )}
         </div>
-        <div>
-          {messages.slice(0,3).map((m, i) => (
-            <div key={i} style={{ color: m.line ? '#f59e0b' : '#ef4444', fontSize: 12 }}>{m.message}{m.line ? ` (line ${m.line})` : ''}</div>
+        <div style={styles.remoteCursorsInfo}>
+          {Object.entries(remoteCursors).map(([id, state]) => (
+            <span 
+              key={id} 
+              style={{
+                ...styles.cursorBadge,
+                backgroundColor: `${state.color}33`,
+                color: state.color
+              }}
+            >
+              <span style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                backgroundColor: state.color
+              }}></span>
+              {state.name}
+            </span>
           ))}
         </div>
       </div>
@@ -104,7 +364,7 @@ function CodeEditor({
         <Editor
           height={'100%'}
           language={language}
-          value={code}
+          defaultValue={code}
           onMount={handleEditorMount}
           onChange={handleEditorChange}
           theme="vs-dark"
@@ -123,44 +383,5 @@ function CodeEditor({
     </div>
   );
 }
-
-const styles = {
-  container: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    boxShadow: '0 6px 18px rgba(0, 0, 0, 0.12)',
-    width: '70%',
-    maxWidth: '1100px',
-    margin: '0 auto',
-    height: '100vh',
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  editorHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px 16px',
-    backgroundColor: '#1f2937',
-    color: 'white'
-  },
-  editorTitle: {
-    fontSize: '14px',
-    fontWeight: '600'
-  },
-  language: {
-    fontSize: '12px',
-    padding: '4px 8px',
-    backgroundColor: '#374151',
-    borderRadius: '4px',
-    textTransform: 'uppercase'
-  },
-  editorWrapper: {
-    backgroundColor: '#1e1e1e',
-    flex: 1,
-    minHeight: 0
-  }
-};
 
 export default CodeEditor;

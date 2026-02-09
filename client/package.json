@@ -10,7 +10,10 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.11.0",
     "react-scripts": "5.0.1",
-    "socket.io-client": "^4.6.1"
+    "socket.io-client": "^4.6.1",
+    "y-monaco": "^0.1.6",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.29"
   },
   "scripts": {
     "start": "react-scripts start",
