@@ -163,6 +163,26 @@ function createRoom(roomCode, hostId, hostName) {
     buzzedPlayer: null,
     activeVote: null,
     createdAt: Date.now(),
+    files: [ // Initialize with 3 files
+      {
+        id: 'file-1',
+        name: 'main.html',
+        language: 'html',
+        content: '<!DOCTYPE html>\n<html>\n<head>\n  <title>My Page</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <h1>Welcome</h1>\n  <script src="script.js"></script>\n</body>\n</html>'
+      },
+      {
+        id: 'file-2',
+        name: 'styles.css',
+        language: 'css',
+        content: 'body {\n  margin: 0;\n  padding: 20px;\n  font-family: Arial;\n}\n\nh1 {\n  color: #333;\n}'
+      },
+      {
+        id: 'file-3',
+        name: 'script.js',
+        language: 'javascript',
+        content: 'console.log("Hello World");'
+      }
+    ],
   };
 
   // Add host as first player
@@ -299,6 +319,76 @@ function startRound(room) {
     ...sample,
     currentBug: bug,
   };
+
+  // Create files with HTML wrapper for the challenge
+  const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Challenge</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <h1>Code Challenge</h1>
+    <div id="output"></div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>`;
+
+  const cssContent = `body {
+  margin: 0;
+  padding: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+
+#app {
+  max-width: 800px;
+  margin: 0 auto;
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 20px;
+}
+
+#output {
+  padding: 15px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  min-height: 100px;
+}`;
+
+  const jsContent = bug.buggedCode;
+
+  room.files = [
+    {
+      id: 'file-1',
+      name: 'main.html',
+      language: 'html',
+      content: htmlContent
+    },
+    {
+      id: 'file-2',
+      name: 'styles.css',
+      language: 'css',
+      content: cssContent
+    },
+    {
+      id: 'file-3',
+      name: 'script.js',
+      language: 'javascript',
+      content: jsContent
+    }
+  ];
 
   room.roundStartTime = Date.now();
   room.buzzedPlayer = null;
@@ -618,6 +708,54 @@ function cleanupOldRooms() {
 // Run cleanup every 30 minutes
 setInterval(cleanupOldRooms, 30 * 60 * 1000);
 
+// File management functions
+function updateFile(roomCode, fileId, content) {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+  
+  const file = room.files.find(f => f.id === fileId);
+  if (!file) return { error: 'File not found' };
+  
+  file.content = content;
+  return { success: true };
+}
+
+function addFile(roomCode, fileName, language, content) {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+  
+  // Check if file already exists
+  if (room.files.some(f => f.name === fileName)) {
+    return { error: 'File already exists' };
+  }
+  
+  const newFile = {
+    id: `file-${Date.now()}`,
+    name: fileName,
+    language: language,
+    content: content || ''
+  };
+  
+  room.files.push(newFile);
+  return { success: true, file: newFile };
+}
+
+function deleteFile(roomCode, fileId) {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+  
+  // Don't allow deleting if only one file remains
+  if (room.files.length <= 1) {
+    return { error: 'Cannot delete the last file' };
+  }
+  
+  const index = room.files.findIndex(f => f.id === fileId);
+  if (index === -1) return { error: 'File not found' };
+  
+  room.files.splice(index, 1);
+  return { success: true };
+}
+
 module.exports = {
   createRoom,
   getRoom,
@@ -636,4 +774,7 @@ module.exports = {
   codeSamples,
   checkBuggerWin,
   checkDebuggersWin,
+  updateFile,
+  addFile,
+  deleteFile,
 };

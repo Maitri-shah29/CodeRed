@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import socket from '../socket';
 import CodeEditor from '../components/CodeEditor';
+import FileTree from '../components/FileTree';
 import { Bell, LogOut } from 'lucide-react';
 
 function Game() {
@@ -10,6 +11,8 @@ function Game() {
   const { roomCode, playerId, playerName, room: initialRoom } = location.state || {};
 
   const [room, setRoom] = useState(initialRoom);
+  const [files, setFiles] = useState(initialRoom?.files || []);
+  const [activeFile, setActiveFile] = useState(null);
   const [code, setCode] = useState('');
   const [timeRemaining, setTimeRemaining] = useState(90);
   const [buzzedPlayerName, setBuzzedPlayerName] = useState(null);
@@ -26,6 +29,12 @@ function Game() {
     if (!roomCode || !playerId || !room) {
       navigate('/');
       return;
+    }
+
+    // Initialize files and active file
+    if (room.files && room.files.length > 0) {
+      setFiles(room.files);
+      setActiveFile(room.files[0]);
     }
 
     if (room.currentCode) {
@@ -130,6 +139,12 @@ function Game() {
       setShowFixModal(false);
       setFeedback(null);
       
+      // Initialize files for new round
+      if (updatedRoom.files && updatedRoom.files.length > 0) {
+        setFiles(updatedRoom.files);
+        setActiveFile(updatedRoom.files[0]);
+      }
+      
       if (updatedRoom.currentCode) {
         const currentPlayer = updatedRoom.players.find((p) => p.id === playerId);
         if (currentPlayer?.role === 'bugger') {
@@ -157,6 +172,33 @@ function Game() {
       setRoom(updatedRoom);
     });
 
+    // File sync handlers
+    socket.on('fileChanged', ({ fileId, content }) => {
+      setFiles(prevFiles =>
+        prevFiles.map(f => f.id === fileId ? { ...f, content } : f)
+      );
+      
+      setActiveFile(prev =>
+        prev?.id === fileId ? { ...prev, content } : prev
+      );
+    });
+
+    socket.on('fileAdded', ({ file }) => {
+      setFiles(prevFiles => [...prevFiles, file]);
+    });
+
+    socket.on('fileDeleted', ({ fileId }) => {
+      setFiles(prevFiles => prevFiles.filter(f => f.id !== fileId));
+      
+      setActiveFile(prev => {
+        if (prev?.id === fileId) {
+          const remaining = files.filter(f => f.id !== fileId);
+          return remaining.length > 0 ? remaining[0] : null;
+        }
+        return prev;
+      });
+    });
+
     return () => {
       socket.off('timerUpdate');
       socket.off('playerBuzzed');
@@ -171,6 +213,9 @@ function Game() {
       socket.off('roundStarted');
       socket.off('gameEnded');
       socket.off('playerLeft');
+      socket.off('fileChanged');
+      socket.off('fileAdded');
+      socket.off('fileDeleted');
     };
   }, [roomCode, playerId, navigate, room, code, playerName]);
 
@@ -220,6 +265,67 @@ function Game() {
     if (getCurrentPlayer()?.role === 'bugger') {
       socket.emit('submitBug', { buggedCode: newCode });
     }
+  };
+
+  const handleFileChange = (fileId, newContent) => {
+    setFiles(prevFiles =>
+      prevFiles.map(f => f.id === fileId ? { ...f, content: newContent } : f)
+    );
+    
+    setActiveFile(prev =>
+      prev?.id === fileId ? { ...prev, content: newContent } : prev
+    );
+
+    socket.emit('fileUpdate', { fileId, content: newContent }, (response) => {
+      if (!response.success) {
+        console.error('Failed to update file:', response.error);
+      }
+    });
+  };
+
+  const handleFileSelect = (file) => {
+    setActiveFile(file);
+  };
+
+  const handleAddFile = () => {
+    const fileName = prompt('Enter file name (e.g., utils.js, styles.css):');
+    if (!fileName) return;
+
+    const ext = fileName.split('.').pop().toLowerCase();
+    const languageMap = {
+      'js': 'javascript',
+      'css': 'css',
+      'html': 'html',
+      'json': 'json',
+      'md': 'markdown'
+    };
+    const language = languageMap[ext] || 'javascript';
+
+    socket.emit('addFile', { fileName, language, content: '' }, (response) => {
+      if (response.success) {
+        setFiles(prev => [...prev, response.file]);
+        setActiveFile(response.file);
+      } else {
+        alert('Failed to add file: ' + response.error);
+      }
+    });
+  };
+
+  const handleDeleteFile = (file) => {
+    if (!window.confirm(`Delete ${file.name}?`)) return;
+
+    socket.emit('deleteFile', { fileId: file.id }, (response) => {
+      if (response.success) {
+        setFiles(prev => prev.filter(f => f.id !== file.id));
+        
+        if (activeFile?.id === file.id) {
+          const remaining = files.filter(f => f.id !== file.id);
+          setActiveFile(remaining.length > 0 ? remaining[0] : null);
+        }
+      } else {
+        alert('Failed to delete file: ' + response.error);
+      }
+    });
   };
 
   const handleLeaveRoom = () => {
@@ -370,14 +476,27 @@ function Game() {
         </div>
 
         <div className="center-panel">
+          <div className="file-tree-container">
+            <FileTree
+              files={files}
+              activeFile={activeFile}
+              onFileSelect={handleFileSelect}
+              onAddFile={handleAddFile}
+              onDeleteFile={handleDeleteFile}
+              canEdit={true}
+            />
+          </div>
           <div className="code-editor-container">
-            {room.currentCode && (
+            {files.length > 0 && activeFile && (
               <CodeEditor
-                code={code}
-                onChange={handleCodeChange}
-                readOnly={!isBugger && !showFixModal}
-                language={room.currentCode.language}
-                height="calc(100vh - 180px)"
+                files={files}
+                activeFile={activeFile}
+                onFileChange={handleFileChange}
+                onFileSelect={handleFileSelect}
+                locked={!isBugger && !showFixModal}
+                canEdit={isBugger || showFixModal}
+                showTabs={true}
+                height="100%"
               />
             )}
           </div>
@@ -480,9 +599,13 @@ function Game() {
             <h2>Submit Your Fix</h2>
             <p>Edit the code below to fix the bug you found:</p>
             <CodeEditor
-              code={fixedCode}
-              onChange={setFixedCode}
-              language={room.currentCode.language}
+              files={files}
+              activeFile={activeFile}
+              onFileChange={handleFileChange}
+              onFileSelect={handleFileSelect}
+              locked={false}
+              canEdit={true}
+              showTabs={true}
               height="400px"
             />
             <div className="modal-actions">
@@ -604,7 +727,7 @@ function Game() {
           grid-template-columns: 280px 1fr;
           gap: 20px;
           padding: 20px;
-          height: calc(100vh - 140px);
+          height: calc(100vh - 120px);
         }
 
         .left-panel {
@@ -730,8 +853,14 @@ function Game() {
 
         .center-panel {
           display: flex;
-          flex-direction: column;
+          flex-direction: row;
           gap: 15px;
+          height: 100%;
+        }
+
+        .file-tree-container {
+          width: 220px;
+          flex-shrink: 0;
         }
 
         .timer-display {
@@ -757,10 +886,10 @@ function Game() {
 
         .code-editor-container {
           flex: 1;
-          border: 2px solid #00ff88;
-          border-radius: 8px;
           overflow: hidden;
-          background: #1e1e1e;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
         }
 
         .players-display {
