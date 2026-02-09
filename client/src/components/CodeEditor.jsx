@@ -1,6 +1,17 @@
 // CodeEditor component - Multi-file support with tabs
 import React, { useRef, useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
+import * as Y from 'yjs';
+import { MonacoBinding } from 'y-monaco';
+
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+const WS_URL = SERVER_URL.replace('http://', 'ws://').replace('https://', 'wss://');
+
+// Message types (must match server)
+const MSG_SYNC_REQUEST = 0;
+const MSG_SYNC_RESPONSE = 1;
+const MSG_UPDATE = 2;
+const MSG_AWARENESS = 3;
 
 function CodeEditor({ 
   files = [],
@@ -19,6 +30,8 @@ function CodeEditor({
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    // Create MonacoBinding now that editor is ready (yText may already exist)
+    ensureBinding();
   };
 
   const handleEditorChange = (value) => {
@@ -86,7 +99,6 @@ function CodeEditor({
           language={activeFile.language}
           value={activeFile.content}
           onMount={handleEditorMount}
-          onChange={handleEditorChange}
           theme="vs-dark"
           options={{
             readOnly: locked,

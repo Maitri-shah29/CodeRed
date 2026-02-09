@@ -25,6 +25,8 @@ const {
   isValidPlayerName,
 } = require("./utils");
 
+const { initializeRoomCode, cleanupRoom } = require('./yjsServer');
+
 // Track socket to player/room mappings
 const socketToPlayer = new Map();
 const playerToSocket = new Map();
@@ -202,6 +204,11 @@ function setupSocketHandlers(io) {
         room: serializeRoom(result),
       });
 
+      // Initialize Yjs doc with the round's code so all editors start in sync
+      if (result.currentCode) {
+        initializeRoomCode(roomCode, result.currentCode.currentBug.buggedCode);
+      }
+
       // Start round timer
       startRoundTimer(io, roomCode);
 
@@ -305,7 +312,7 @@ function setupSocketHandlers(io) {
       }, 3000);
     });
 
-    // SUBMIT BUG (from bugger)
+    // SUBMIT BUG (from bugger) — updates server state only, Yjs handles real-time sync
     socket.on("submitBug", ({ buggedCode }, callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -314,20 +321,41 @@ function setupSocketHandlers(io) {
       const room = getRoom(roomCode);
 
       if (!room || room.bugger !== playerId) {
-        return callback({
-          success: false,
-          error: "Only bugger can submit bugs",
-        });
+        if (callback) return callback({ success: false, error: 'Only bugger can submit bugs' });
+        return;
       }
 
-      // Update the bugged code
+      // Update server-side game state (used for fix validation)
       room.currentCode.buggedCode = buggedCode;
 
-      callback({ success: true });
+      if (callback) callback({ success: true });
+      // NOTE: No codeUpdated broadcast — Yjs WebSocket handles real-time sync
+    });
 
-      // Notify debuggers that code was updated
-      socket.to(roomCode).emit("codeUpdated", {
-        code: buggedCode,
+    // CURSOR UPDATE (broadcast cursor position to other players)
+    socket.on('cursorUpdate', ({ position }) => {
+      const playerData = socketToPlayer.get(socket.id);
+      if (!playerData) return;
+
+      const { playerId, roomCode } = playerData;
+      const room = getRoom(roomCode);
+      if (!room) return;
+
+      // Get player info for color assignment
+      const player = room.players.get(playerId);
+      if (!player) return;
+
+      // Find player index for color
+      const playerIndex = Array.from(room.players.keys()).indexOf(playerId);
+      const colors = ['#00ddff', '#00ff88', '#dd00ff', '#ffcc00', '#ff9900', '#ff3366'];
+      const playerColor = colors[playerIndex % colors.length];
+
+      // Broadcast cursor position to all other players
+      socket.to(roomCode).emit('cursorMoved', {
+        playerId,
+        playerName: player.name,
+        position,
+        color: playerColor
       });
     });
 
@@ -513,6 +541,8 @@ function handleEndRound(io, roomCode) {
     io.to(roomCode).emit("gameEnded", {
       room: serializeRoom(room),
     });
+    // Clean up Yjs document
+    cleanupRoom(roomCode);
   } else {
     // Next round
     io.to(roomCode).emit("roundEnded", {
@@ -521,6 +551,11 @@ function handleEndRound(io, roomCode) {
 
     // Start next round after brief delay
     setTimeout(() => {
+      // Initialize Yjs doc with the new round's code
+      if (room.currentCode) {
+        initializeRoomCode(roomCode, room.currentCode.currentBug.buggedCode);
+      }
+
       io.to(roomCode).emit("roundStarted", {
         room: serializeRoom(room),
       });

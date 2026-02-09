@@ -91,6 +91,10 @@ app.get('/admin/rooms/:roomCode', (req, res) => {
 // Setup socket event handlers
 setupSocketHandlers(io);
 
+// Setup Yjs WebSocket server for collaborative editing
+const { setupYjsServer } = require('./yjsServer');
+setupYjsServer(server);
+
 const PORT = process.env.PORT || 3001;
 
 server.listen(PORT,"0.0.0.0", () => {
