@@ -14,6 +14,9 @@ const {
   resetGame,
   checkBuggerWin,
   checkDebuggersWin,
+  updateFile,
+  addFile,
+  deleteFile,
 } = require("./gameState");
 
 const {
@@ -390,6 +393,66 @@ function setupSocketHandlers(io) {
       }
     });
 
+    // FILE SYNC - Update file content
+    socket.on("fileUpdate", ({ fileId, content }, callback) => {
+      const playerData = socketToPlayer.get(socket.id);
+      if (!playerData) {
+        return callback({ success: false, error: "Not in a room" });
+      }
+
+      const { roomCode } = playerData;
+      const result = updateFile(roomCode, fileId, content);
+
+      if (result.error) {
+        return callback({ success: false, error: result.error });
+      }
+
+      // Broadcast to all other players in the room
+      socket.to(roomCode).emit("fileChanged", { fileId, content });
+      
+      callback({ success: true });
+    });
+
+    // FILE SYNC - Add new file
+    socket.on("addFile", ({ fileName, language, content }, callback) => {
+      const playerData = socketToPlayer.get(socket.id);
+      if (!playerData) {
+        return callback({ success: false, error: "Not in a room" });
+      }
+
+      const { roomCode } = playerData;
+      const result = addFile(roomCode, fileName, language, content);
+
+      if (result.error) {
+        return callback({ success: false, error: result.error });
+      }
+
+      // Broadcast to all players in the room including sender
+      io.to(roomCode).emit("fileAdded", { file: result.file });
+      
+      callback({ success: true, file: result.file });
+    });
+
+    // FILE SYNC - Delete file
+    socket.on("deleteFile", ({ fileId }, callback) => {
+      const playerData = socketToPlayer.get(socket.id);
+      if (!playerData) {
+        return callback({ success: false, error: "Not in a room" });
+      }
+
+      const { roomCode } = playerData;
+      const result = deleteFile(roomCode, fileId);
+
+      if (result.error) {
+        return callback({ success: false, error: result.error });
+      }
+
+      // Broadcast to all players in the room including sender
+      io.to(roomCode).emit("fileDeleted", { fileId });
+      
+      callback({ success: true });
+    });
+
     // DISCONNECT
     socket.on("disconnect", () => {
       const playerData = socketToPlayer.get(socket.id);
@@ -699,6 +762,7 @@ function serializeRoom(room) {
     scores: Object.fromEntries(room.scores),
     buzzedPlayer: room.buzzedPlayer,
     activeVote: serializeBuzzVote(room.activeVote),
+    files: room.files || [],
   };
 
   console.log(`Serialized room ${room.code} with ${serialized.players.length} players`);
