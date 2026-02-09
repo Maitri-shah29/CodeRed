@@ -5,30 +5,12 @@ import CodeEditor from "../components/CodeEditor";
 import { Bell, LogOut } from "lucide-react";
 
 function Game() {
-  // Intercept browser back navigation and trigger leave logic
-  useEffect(() => {
-    const onPopState = (e) => {
-      e.preventDefault();
-      handleLeaveRoom();
-      window.history.pushState(null, "", window.location.pathname);
-    };
-    window.history.pushState(null, "", window.location.pathname);
-    window.addEventListener("popstate", onPopState);
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-    };
-  }, []);
   const navigate = useNavigate();
   const location = useLocation();
-  const {
-    roomCode,
-    playerId,
-    playerName,
-    room: initialRoom,
-  } = location.state || {};
+  const { roomCode, playerId, playerName, room: initialRoom } = location.state || {};
 
   const [room, setRoom] = useState(initialRoom);
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState('');
   const [timeRemaining, setTimeRemaining] = useState(90);
   const [buzzedPlayerName, setBuzzedPlayerName] = useState(null);
   const [buzzedPlayerId, setBuzzedPlayerId] = useState(null);
@@ -37,8 +19,9 @@ function Game() {
   const [hasVoted, setHasVoted] = useState(false);
   const [voteTimeRemaining, setVoteTimeRemaining] = useState(60);
   const [showFixModal, setShowFixModal] = useState(false);
-  const [fixedCode, setFixedCode] = useState("");
+  const [fixedCode, setFixedCode] = useState('');
   const [feedback, setFeedback] = useState(null);
+  const [showRoleReveal, setShowRoleReveal] = useState(true);
 
   // Refs for values that change often but are read inside event handlers
   const codeRef = useRef(code);
@@ -139,17 +122,37 @@ function Game() {
   };
 
   const handleBuzz = () => {
-    socket.emit("buzz", (response) => {
+    socket.emit('buzz', (response) => {
       if (!response.success) {
-        alert(response.error || "Failed to buzz");
+        alert(response.error || 'Failed to buzz');
+      }
+    });
+  };
+
+  const handleCastVote = (targetPlayerId) => {
+    socket.emit('castBuzzVote', { targetPlayerId }, (response) => {
+      if (!response.success) {
+        alert(response.error || 'Failed to vote');
+      } else {
+        setHasVoted(true);
+      }
+    });
+  };
+
+  const handleSkipVote = () => {
+    socket.emit('castBuzzVote', { targetPlayerId: 'skip' }, (response) => {
+      if (!response.success) {
+        alert(response.error || 'Failed to skip');
+      } else {
+        setHasVoted(true);
       }
     });
   };
 
   const handleSubmitFix = () => {
-    socket.emit("submitFix", { fixedCode }, (response) => {
+    socket.emit('submitFix', { fixedCode }, (response) => {
       if (!response.success) {
-        alert("Failed to submit fix");
+        alert('Failed to submit fix');
       }
     });
   };
@@ -164,43 +167,23 @@ function Game() {
   };
 
   const handleLeaveRoom = () => {
-    if (window.confirm("Are you sure you want to leave the game?")) {
+    if (window.confirm('Are you sure you want to leave the game?')) {
       socket.disconnect();
-      navigate("/");
+      navigate('/');
     }
-  };
-
-  const handleCastVote = (targetPlayerId) => {
-    socket.emit("castVote", { targetPlayerId }, (response) => {
-      if (response.success) {
-        setHasVoted(true);
-      } else {
-        alert(response.error || "Failed to cast vote");
-      }
-    });
-  };
-
-  const handleSkipVote = () => {
-    socket.emit("skipVote", (response) => {
-      if (response.success) {
-        setHasVoted(true);
-      } else {
-        alert(response.error || "Failed to skip vote");
-      }
-    });
   };
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
   if (!room) {
     return (
       <div className="game-container">
         <div className="loading">Loading game...</div>
-        <style>{`
+        <style jsx>{`
           .game-container {
             min-height: 100vh;
             background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
@@ -211,7 +194,7 @@ function Game() {
           .loading {
             color: #00ff88;
             font-size: 20px;
-            font-family: "Share Tech Mono", monospace;
+            font-family: 'Share Tech Mono', monospace;
           }
         `}</style>
       </div>
@@ -219,27 +202,26 @@ function Game() {
   }
 
   const currentPlayer = getCurrentPlayer();
-  const isBugger = currentPlayer?.role === "bugger";
-  const isDisabled = currentPlayer?.disabled === true;
-  const canBuzz = !isBugger && !buzzedPlayerName;
+  const isBugger = currentPlayer?.role === 'bugger';
+  const isDisabled = currentPlayer?.disabled;
+  const canBuzz = !isBugger && !buzzedPlayerName && !isDisabled;
 
-  const bugsList = room.currentCode?.currentBug
-    ? [
-        { id: 1, title: "Off-by-one error", location: "calculateTotal loop" },
-        { id: 2, title: "Missing async/await", location: "fetchUserData" },
-        { id: 3, title: "No input sanitization", location: "sanitizeInput" },
-        {
-          id: 4,
-          title: "Potential prototype pollution",
-          location: "mergeObjects",
-        },
-      ]
-    : [];
+  const bugsList = room.currentCode?.currentBug ? [
+    { id: 1, title: room.currentCode.currentBug.description, location: room.currentCode.title }
+  ] : [];
 
-  const playerColors = ["#00ddff", "#00ff88", "#dd00ff", "#ffcc00"];
+  const playerColors = ['#00ddff', '#00ff88', '#dd00ff', '#ffcc00', '#ff9900', '#ff3366'];
 
   return (
     <div className="game-container">
+      {/* Role Reveal Animation */}
+      {showRoleReveal && currentPlayer?.role && (
+        <RoleReveal 
+          role={currentPlayer.role} 
+          onComplete={() => setShowRoleReveal(false)} 
+        />
+      )}
+      
       <div className="top-bar">
         <div className="left">
           <span className="title">CODERED</span>
@@ -247,9 +229,10 @@ function Game() {
         </div>
         <div className="right">
           <span className="room-code">ROOM: #{roomCode}</span>
-          <span className="role-badge">
-            {isBugger ? "BUGGER" : "DEVELOPER"}
+          <span className={`role-badge ${isBugger ? 'bugger' : 'debugger'}`}>
+            {isBugger ? '🐛 BUGGER' : '🔍 DEBUGGER'}
           </span>
+          {isDisabled && <span className="disabled-badge">❌ DISABLED</span>}
         </div>
       </div>
 
@@ -287,7 +270,7 @@ function Game() {
               <span>CURRENT BUG</span>
             </div>
             <div className="bugs-list">
-              {bugsList.map((bug) => (
+              {bugsList.map(bug => (
                 <div key={bug.id} className="bug-item">
                   <span className="bug-icon">🐛</span>
                   <div className="bug-info">
@@ -309,13 +292,30 @@ function Game() {
                 <span>BUGGER TOOLS</span>
               </div>
               <div className="tools-content">
-                <p className="tools-text">
-                  You have ONE chance to reveal a bug:
-                </p>
-                <button className="reveal-btn">
-                  <span className="icon">👁</span>
-                  REVEAL BUG
-                </button>
+                <p className="tools-text">Edit the code to introduce subtle bugs:</p>
+                <div className="tool-info">
+                  <span className="info-icon">💡</span>
+                  <span>Real-time editing enabled</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!isBugger && !isDisabled && (
+            <div className="info-panel">
+              <div className="panel-header">
+                <span className="icon">ℹ️</span>
+                <span>GAME INFO</span>
+              </div>
+              <div className="info-content">
+                <div className="info-item">
+                  <span className="info-label">Your Role:</span>
+                  <span className="info-value">Debugger</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Status:</span>
+                  <span className="info-value">{buzzedPlayerName ? 'Voting...' : 'Active'}</span>
+                </div>
               </div>
             </div>
           )}
@@ -327,12 +327,13 @@ function Game() {
               <CodeEditor
                 code={code}
                 onChange={handleCodeChange}
+                readOnly={false}
                 language={room.currentCode.language}
                 height="calc(100vh - 180px)"
                 roomCode={roomCode}
                 playerId={playerId}
                 playerName={playerName}
-                playerColor={playerColors[room.players.findIndex(p => p.id === playerId) % playerColors.length] || '#00ff88'}
+                playerColor={playerColors[room.players.findIndex(p => p.id === playerId) % playerColors.length]}
               />
             )}
           </div>
@@ -342,16 +343,16 @@ function Game() {
       {!isBugger && !isDisabled && (
         <div className="buzzer-section">
           <button
-            className={`buzzer-button ${!canBuzz ? "disabled" : ""}`}
+            className={`buzzer-button ${!canBuzz ? 'disabled' : ''}`}
             onClick={handleBuzz}
             disabled={!canBuzz}
           >
             <Bell size={40} />
           </button>
           <div className="buzzer-text">
-            {buzzedPlayerName
-              ? `${buzzedPlayerName} is fixing...`
-              : "Press to pause & start voting"}
+            {buzzedPlayerName 
+              ? `${buzzedPlayerName} buzzed!` 
+              : 'Press to start voting'}
           </div>
           <button className="leave-btn" onClick={handleLeaveRoom}>
             <LogOut size={18} />
@@ -360,73 +361,19 @@ function Game() {
         </div>
       )}
 
-      {/* Vote Modal */}
-      {showVoteModal && voteData && (
-        <div className="modal-overlay">
-          <div className="modal-content vote-modal">
-            <h2>🗳️ VOTE TO KICK A PLAYER</h2>
-            <p className="modal-subtitle">
-              <strong>{buzzedPlayerName}</strong> buzzed! Vote for who to kick, or skip.
-            </p>
-
-            {isDisabled ? (
-              <div className="disabled-message">
-                <span className="icon">❌</span>
-                <p>You are disabled and cannot vote</p>
-              </div>
-            ) : (
-              <>
-                <div className="vote-stats">
-                  <div className="stat">
-                    <div className="stat-value">{voteData.votedCount || 0}</div>
-                    <div className="stat-label">Votes Cast</div>
-                  </div>
-                  <div className="stat">
-                    <div className="stat-value">{voteData.skipCount || 0}</div>
-                    <div className="stat-label">Skipped</div>
-                  </div>
-                  <div className="stat">
-                    <div className="stat-value">{voteTimeRemaining}s</div>
-                    <div className="stat-label">Remaining</div>
-                  </div>
-                </div>
-
-                <div className="vote-players">
-                  {room.players
-                    .filter((p) => p.id !== playerId && !p.disabled)
-                    .map((player, idx) => (
-                      <button
-                        key={player.id}
-                        onClick={() => handleCastVote(player.id)}
-                        className={`vote-player-btn ${hasVoted ? 'disabled' : ''}`}
-                        disabled={hasVoted}
-                        style={{ borderColor: playerColors[idx] }}
-                      >
-                        <span className="player-indicator" style={{ backgroundColor: playerColors[idx] }}></span>
-                        {player.name}
-                        {player.role === 'bugger' && <span className="role-icon">🐛</span>}
-                      </button>
-                    ))}
-                </div>
-
-                <button
-                  onClick={handleSkipVote}
-                  className={`skip-vote-btn ${hasVoted ? 'disabled' : ''}`}
-                  disabled={hasVoted}
-                >
-                  ⏭️ SKIP VOTE
-                </button>
-
-                {hasVoted && (
-                  <p className="voted-message">
-                    ✓ Your vote has been recorded. Waiting for others...
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Vote Modal Component */}
+      <VoteModal
+        isOpen={showVoteModal}
+        voteData={voteData}
+        voteTimeRemaining={voteTimeRemaining}
+        buzzedPlayerName={buzzedPlayerName}
+        players={room.players}
+        currentPlayerId={playerId}
+        isDisabled={isDisabled}
+        hasVoted={hasVoted}
+        onCastVote={handleCastVote}
+        onSkipVote={handleSkipVote}
+      />
 
       {/* Fix Modal */}
       {showFixModal && (
@@ -444,10 +391,7 @@ function Game() {
               <button onClick={handleSubmitFix} className="submit-btn">
                 Submit Fix
               </button>
-              <button
-                onClick={() => setShowFixModal(false)}
-                className="cancel-btn"
-              >
+              <button onClick={() => setShowFixModal(false)} className="cancel-btn">
                 Cancel
               </button>
             </div>
@@ -457,9 +401,9 @@ function Game() {
 
       {/* Feedback */}
       {feedback && (
-        <div className={`feedback ${feedback.isCorrect ? "success" : "error"}`}>
+        <div className={`feedback ${feedback.isCorrect ? 'success' : 'error'}`}>
           <div className="feedback-title">
-            {feedback.isCorrect ? "✅ Correct Fix!" : "❌ Incorrect Fix"}
+            {feedback.isCorrect ? '✅ Correct Fix!' : '❌ Incorrect Fix'}
           </div>
           <div className="feedback-text">
             <strong>Bug:</strong> {feedback.bugDescription}
@@ -468,13 +412,13 @@ function Game() {
       )}
 
       <style jsx>{`
-        @import url("https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap");
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
         .game-container {
           min-height: 100vh;
           background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
           color: #00ff88;
-          font-family: "Share Tech Mono", monospace;
+          font-family: 'Share Tech Mono', monospace;
           position: relative;
           overflow: hidden;
         }
@@ -571,8 +515,7 @@ function Game() {
           gap: 20px;
         }
 
-        .bugs-panel,
-        .tools-panel {
+        .bugs-panel, .tools-panel, .info-panel {
           border: 2px solid #00ff88;
           border-radius: 8px;
           background: rgba(0, 255, 136, 0.05);
@@ -658,17 +601,7 @@ function Game() {
           line-height: 1.5;
         }
 
-        .reveal-btn {
-          width: 100%;
-          background: rgba(221, 0, 255, 0.2);
-          border: 2px solid #dd00ff;
-          color: #dd00ff;
-          padding: 12px;
-          border-radius: 5px;
-          font-family: "Share Tech Mono", monospace;
-          font-size: 12px;
-          font-weight: bold;
-          cursor: pointer;
+        .tool-info {
           display: flex;
           align-items: center;
           gap: 8px;
@@ -793,28 +726,21 @@ function Game() {
           height: 120px;
           border-radius: 50%;
           border: 4px solid #ff3366;
-          background: radial-gradient(
-            circle,
-            #ff6b6b 0%,
-            #ff3366 50%,
-            #cc0033 100%
-          );
+          background: radial-gradient(circle, #ff6b6b 0%, #ff3366 50%, #cc0033 100%);
           color: white;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
           transition: all 0.3s ease;
-          box-shadow:
-            0 0 40px rgba(255, 51, 102, 0.6),
-            inset 0 0 20px rgba(255, 255, 255, 0.2);
+          box-shadow: 0 0 40px rgba(255, 51, 102, 0.6),
+                      inset 0 0 20px rgba(255, 255, 255, 0.2);
         }
 
         .buzzer-button:hover:not(.disabled) {
           transform: scale(1.05);
-          box-shadow:
-            0 0 50px rgba(255, 51, 102, 0.8),
-            inset 0 0 25px rgba(255, 255, 255, 0.3);
+          box-shadow: 0 0 50px rgba(255, 51, 102, 0.8),
+                      inset 0 0 25px rgba(255, 255, 255, 0.3);
         }
 
         .buzzer-button:active:not(.disabled) {
@@ -842,7 +768,7 @@ function Game() {
           color: #ff3366;
           padding: 10px 20px;
           border-radius: 5px;
-          font-family: "Share Tech Mono", monospace;
+          font-family: 'Share Tech Mono', monospace;
           font-size: 11px;
           cursor: pointer;
           display: flex;
@@ -895,155 +821,17 @@ function Game() {
           margin-bottom: 20px;
         }
 
-        .modal-subtitle {
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        .vote-modal h2 {
-          text-align: center;
-          margin-bottom: 15px;
-        }
-
-        .vote-stats {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 15px;
-          margin-bottom: 25px;
-          padding: 20px;
-          background: rgba(0, 255, 136, 0.05);
-          border-radius: 8px;
-        }
-
-        .stat {
-          text-align: center;
-        }
-
-        .stat-value {
-          font-size: 28px;
-          font-weight: bold;
-          color: #00ddff;
-          margin-bottom: 5px;
-        }
-
-        .stat-label {
-          font-size: 10px;
-          color: #666;
-          letter-spacing: 1px;
-        }
-
-        .vote-players {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-          margin-bottom: 20px;
-        }
-
-        .vote-player-btn {
-          background: rgba(0, 221, 255, 0.05);
-          border: 2px solid #00ddff;
-          color: #00ddff;
-          padding: 15px;
-          border-radius: 6px;
-          font-family: 'Share Tech Mono', monospace;
-          font-size: 12px;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .vote-player-btn:hover:not(.disabled) {
-          background: rgba(0, 221, 255, 0.15);
-          box-shadow: 0 0 15px rgba(0, 221, 255, 0.3);
-          transform: translateY(-2px);
-        }
-
-        .vote-player-btn.disabled {
-          opacity: 0.3;
-          cursor: not-allowed;
-        }
-
-        .player-indicator {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          flex-shrink: 0;
-        }
-
-        .role-icon {
-          margin-left: auto;
-          font-size: 16px;
-        }
-
-        .skip-vote-btn {
-          width: 100%;
-          background: rgba(255, 204, 0, 0.1);
-          border: 2px solid #ffcc00;
-          color: #ffcc00;
-          padding: 15px;
-          border-radius: 6px;
-          font-family: 'Share Tech Mono', monospace;
-          font-size: 12px;
-          font-weight: bold;
-          cursor: pointer;
-          transition: all 0.3s ease;
-        }
-
-        .skip-vote-btn:hover:not(.disabled) {
-          background: rgba(255, 204, 0, 0.2);
-          box-shadow: 0 0 15px rgba(255, 204, 0, 0.3);
-        }
-
-        .skip-vote-btn.disabled {
-          opacity: 0.3;
-          cursor: not-allowed;
-        }
-
-        .voted-message {
-          margin-top: 20px;
-          text-align: center;
-          color: #00ff88;
-          font-size: 12px;
-          padding: 15px;
-          background: rgba(0, 255, 136, 0.1);
-          border-radius: 6px;
-          animation: pulse 2s infinite;
-        }
-
-        .disabled-message {
-          padding: 30px;
-          background: rgba(255, 51, 102, 0.1);
-          border: 2px solid #ff3366;
-          border-radius: 8px;
-          text-align: center;
-        }
-
-        .disabled-message .icon {
-          font-size: 48px;
-          display: block;
-          margin-bottom: 15px;
-        }
-
-        .disabled-message p {
-          color: #ff3366;
-          font-size: 14px;
-          margin: 0;
-        }
-
         .modal-actions {
           display: flex;
           gap: 15px;
           margin-top: 20px;
         }
 
-        .submit-btn,
-        .cancel-btn {
+        .submit-btn, .cancel-btn {
           flex: 1;
           padding: 15px;
           border-radius: 5px;
-          font-family: "Share Tech Mono", monospace;
+          font-family: 'Share Tech Mono', monospace;
           font-size: 14px;
           font-weight: bold;
           cursor: pointer;
@@ -1116,17 +904,8 @@ function Game() {
           }
         }
 
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.7; }
-        }
-
         @media (max-width: 1024px) {
           .main-content {
-            grid-template-columns: 1fr;
-          }
-
-          .vote-players {
             grid-template-columns: 1fr;
           }
         }
