@@ -1,4 +1,4 @@
-// Result page
+// Result page - Cyberpunk Neon UI
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import socket from '../socket';
@@ -55,8 +55,23 @@ function Result() {
 
   if (!room) {
     return (
-      <div style={styles.container}>
-        <div style={styles.loading}>Loading results...</div>
+      <div className="result-container">
+        <div className="loading">Loading results...</div>
+        <style jsx>{`
+          .result-container {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .loading {
+            color: #00ff88;
+            font-size: 20px;
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            text-shadow: 0 0 10px #00ff88;
+          }
+        `}</style>
       </div>
     );
   }
@@ -69,290 +84,376 @@ function Result() {
   const winner = sortedPlayers[0];
   const isCurrentPlayerWinner = winner?.id === playerId;
 
+  const playerColors = ['#00ff88', '#00ddff', '#dd00ff', '#ffcc00', '#ff9900', '#ff3366'];
+
   return (
-    <div style={styles.container}>
-      <div style={styles.content}>
-        <div style={styles.header}>
-          <h1 style={styles.title}>🎉 Game Over!</h1>
-          {winner && (
-            <div style={styles.winnerCard}>
-              <div style={styles.winnerIcon}>👑</div>
-              <div style={styles.winnerInfo}>
-                <div style={styles.winnerLabel}>Winner</div>
-                <div style={styles.winnerName}>
-                  {winner.name}
-                  {isCurrentPlayerWinner && ' (You!)'}
-                </div>
-                <div style={styles.winnerScore}>
-                  {room.scores[winner.id]} points
-                </div>
-              </div>
-            </div>
-          )}
+    <div className="result-container">
+      <div className="result-content">
+        {/* Header */}
+        <div className="result-header">
+          <span className="game-over-emoji">🎊</span>
+          <h1 className="game-over-title">GAME OVER</h1>
         </div>
 
-        <div style={styles.main}>
-          <div style={styles.leaderboard}>
-            <h2 style={styles.leaderboardTitle}>Final Scores</h2>
-            <div style={styles.leaderboardList}>
-              {sortedPlayers.map((player, index) => (
-                <div
-                  key={player.id}
-                  style={{
-                    ...styles.leaderboardItem,
-                    ...(player.id === playerId ? styles.currentPlayerItem : {}),
-                    ...(index === 0 ? styles.firstPlace : {}),
-                    ...(index === 1 ? styles.secondPlace : {}),
-                    ...(index === 2 ? styles.thirdPlace : {})
-                  }}
-                >
-                  <div style={styles.rank}>
-                    {index === 0 && '🥇'}
-                    {index === 1 && '🥈'}
-                    {index === 2 && '🥉'}
-                    {index > 2 && `#${index + 1}`}
-                  </div>
-                  <div style={styles.playerInfo}>
-                    <div style={styles.playerName}>
-                      {player.name}
-                      {player.id === playerId && (
-                        <span style={styles.youBadge}>You</span>
-                      )}
-                    </div>
-                  </div>
-                  <div style={styles.score}>{room.scores[player.id] || 0}</div>
-                </div>
-              ))}
+        {/* Winner Card */}
+        {winner && (
+          <div className="winner-card">
+            <span className="winner-crown">👑</span>
+            <div className="winner-info">
+              <span className="winner-label">WINNER</span>
+              <span className="winner-name">
+                {winner.name} {isCurrentPlayerWinner ? '(You!)' : ''}
+              </span>
+              <span className="winner-points">{room.scores[winner.id] || 0} POINTS</span>
             </div>
           </div>
+        )}
 
-          <div style={styles.stats}>
-            <h3 style={styles.statsTitle}>Game Stats</h3>
-            <div style={styles.statsList}>
-              <div style={styles.statItem}>
-                <span style={styles.statLabel}>Total Rounds:</span>
-                <span style={styles.statValue}>{room.totalRounds}</span>
+        {/* Final Scores */}
+        <div className="scores-card">
+          <h2 className="scores-title">FINAL SCORES</h2>
+          <div className="scores-list">
+            {sortedPlayers.map((player, index) => (
+              <div
+                key={player.id}
+                className={`score-row ${player.id === playerId ? 'highlight' : ''}`}
+                style={{ borderColor: playerColors[index % playerColors.length] }}
+              >
+                <span className="score-rank">
+                  {index === 0 && '🥇'}
+                  {index === 1 && '🥈'}
+                  {index === 2 && '🥉'}
+                  {index > 2 && `#${index + 1}`}
+                </span>
+                <span className="score-name">{player.name}</span>
+                {player.id === playerId && <span className="you-badge">YOU</span>}
+                <span className="score-points" style={{ color: playerColors[index % playerColors.length] }}>
+                  {room.scores[player.id] || 0}
+                </span>
               </div>
-              <div style={styles.statItem}>
-                <span style={styles.statLabel}>Players:</span>
-                <span style={styles.statValue}>{room.players.length}</span>
-              </div>
-              <div style={styles.statItem}>
-                <span style={styles.statLabel}>Room Code:</span>
-                <span style={styles.statValue}>{roomCode}</span>
-              </div>
-            </div>
+            ))}
           </div>
+        </div>
 
-          <div style={styles.actions}>
-            <button onClick={handlePlayAgain} style={styles.playAgainButton}>
-              🔄 Play Again
-            </button>
-            <button onClick={handleLeave} style={styles.leaveButton}>
-              🚪 Leave Game
-            </button>
+        {/* Game Stats */}
+        <div className="stats-card">
+          <h2 className="stats-title">GAME STATS</h2>
+          <div className="stat-row">
+            <span className="stat-label">Total Rounds:</span>
+            <span className="stat-value">{room.totalRounds}</span>
           </div>
+          <div className="stat-row">
+            <span className="stat-label">Players:</span>
+            <span className="stat-value">{room.players.length}</span>
+          </div>
+          <div className="stat-row">
+            <span className="stat-label">Room Code:</span>
+            <span className="stat-value">{roomCode}</span>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div className="result-buttons">
+          <button className="btn-play-again" onClick={handlePlayAgain}>
+            🔄 PLAY AGAIN
+          </button>
+          <button className="btn-leave" onClick={handleLeave}>
+            🚪 LEAVE GAME
+          </button>
         </div>
       </div>
+
+      <style jsx>{`
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        .result-container {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+          font-family: 'Press Start 2P', 'Courier New', monospace;
+          color: #e0f0ff;
+          padding: 24px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .result-container::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: 
+            radial-gradient(circle at 20% 20%, rgba(0, 255, 136, 0.1) 0%, transparent 50%),
+            radial-gradient(circle at 80% 80%, rgba(0, 221, 255, 0.1) 0%, transparent 50%);
+          pointer-events: none;
+        }
+
+        .result-content {
+          width: 100%;
+          max-width: 560px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 24px;
+          position: relative;
+          z-index: 1;
+        }
+
+        /* Header */
+        .result-header {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          animation: glow-pulse 2s ease-in-out infinite;
+        }
+
+        .game-over-emoji {
+          font-size: 2.5rem;
+        }
+
+        .game-over-title {
+          font-size: 2.5rem;
+          color: #00ff88;
+          text-shadow: 
+            0 0 10px #00ff88,
+            0 0 20px #00ff88,
+            0 0 40px #00ff88;
+          letter-spacing: 4px;
+          margin: 0;
+        }
+
+        /* Winner Card */
+        .winner-card {
+          width: 100%;
+          background: rgba(0, 255, 136, 0.05);
+          border: 2px solid #ffcc00;
+          border-radius: 8px;
+          padding: 24px 28px;
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          box-shadow: 
+            0 0 20px rgba(255, 204, 0, 0.2),
+            inset 0 0 30px rgba(255, 204, 0, 0.05);
+        }
+
+        .winner-crown {
+          font-size: 2.5rem;
+        }
+
+        .winner-info {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .winner-label {
+          font-size: 0.7rem;
+          color: #ffcc00;
+          letter-spacing: 2px;
+          text-shadow: 0 0 10px #ffcc00;
+        }
+
+        .winner-name {
+          font-size: 1.5rem;
+          color: #00ff88;
+          text-shadow: 0 0 10px #00ff88;
+        }
+
+        .winner-points {
+          font-size: 0.9rem;
+          color: #00ddff;
+          text-shadow: 0 0 10px #00ddff;
+        }
+
+        /* Scores Card */
+        .scores-card {
+          width: 100%;
+          background: rgba(0, 221, 255, 0.05);
+          border: 2px solid #00ddff;
+          border-radius: 8px;
+          padding: 20px 24px;
+          box-shadow: 0 0 20px rgba(0, 221, 255, 0.1);
+        }
+
+        .scores-title {
+          font-size: 0.9rem;
+          color: #00ddff;
+          margin: 0 0 16px 0;
+          letter-spacing: 2px;
+          text-shadow: 0 0 10px #00ddff;
+        }
+
+        .scores-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .score-row {
+          display: flex;
+          align-items: center;
+          padding: 12px 16px;
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 2px solid rgba(0, 221, 255, 0.3);
+          transition: all 0.3s ease;
+        }
+
+        .score-row:hover {
+          background: rgba(255, 255, 255, 0.05);
+          transform: translateX(5px);
+        }
+
+        .score-row.highlight {
+          background: rgba(0, 255, 136, 0.1);
+          border-color: #00ff88;
+          box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
+        }
+
+        .score-rank {
+          font-size: 1.3rem;
+          margin-right: 12px;
+          min-width: 35px;
+          text-align: center;
+        }
+
+        .score-name {
+          font-size: 0.9rem;
+          color: #e0f0ff;
+          flex: 1;
+        }
+
+        .you-badge {
+          font-size: 0.6rem;
+          background: rgba(0, 255, 136, 0.2);
+          color: #00ff88;
+          padding: 3px 8px;
+          border-radius: 4px;
+          margin-right: 15px;
+          letter-spacing: 1px;
+          border: 1px solid #00ff88;
+        }
+
+        .score-points {
+          font-size: 1.1rem;
+          font-weight: bold;
+          text-shadow: 0 0 10px currentColor;
+        }
+
+        /* Stats Card */
+        .stats-card {
+          width: 100%;
+          background: rgba(221, 0, 255, 0.05);
+          border: 2px solid #dd00ff;
+          border-radius: 8px;
+          padding: 20px 24px;
+          box-shadow: 0 0 20px rgba(221, 0, 255, 0.1);
+        }
+
+        .stats-title {
+          font-size: 0.9rem;
+          color: #dd00ff;
+          margin: 0 0 12px 0;
+          letter-spacing: 2px;
+          text-shadow: 0 0 10px #dd00ff;
+        }
+
+        .stat-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 8px 0;
+          font-size: 0.85rem;
+          border-bottom: 1px solid rgba(221, 0, 255, 0.2);
+        }
+
+        .stat-row:last-child {
+          border-bottom: none;
+        }
+
+        .stat-label {
+          color: #888;
+        }
+
+        .stat-value {
+          color: #dd00ff;
+          text-shadow: 0 0 5px #dd00ff;
+        }
+
+        /* Buttons */
+        .result-buttons {
+          width: 100%;
+          display: flex;
+          gap: 12px;
+        }
+
+        .btn-play-again {
+          flex: 1;
+          padding: 16px 24px;
+          border: none;
+          border-radius: 6px;
+          font-family: 'Press Start 2P', 'Courier New', monospace;
+          font-size: 0.85rem;
+          font-weight: bold;
+          cursor: pointer;
+          background: linear-gradient(135deg, #00ff88, #00cc6a);
+          color: #0a0e27;
+          letter-spacing: 1px;
+          transition: all 0.3s ease;
+          box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-play-again:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+        }
+
+        .btn-leave {
+          flex: 1;
+          padding: 16px 24px;
+          border: 2px solid #ff3366;
+          border-radius: 6px;
+          font-family: 'Press Start 2P', 'Courier New', monospace;
+          font-size: 0.85rem;
+          font-weight: bold;
+          cursor: pointer;
+          background: transparent;
+          color: #ff3366;
+          letter-spacing: 1px;
+          transition: all 0.3s ease;
+        }
+
+        .btn-leave:hover {
+          background: rgba(255, 51, 102, 0.1);
+          box-shadow: 0 0 20px rgba(255, 51, 102, 0.3);
+          transform: translateY(-3px);
+        }
+
+        @keyframes glow-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.8; }
+        }
+
+        @media (max-width: 600px) {
+          .game-over-title {
+            font-size: 1.8rem;
+          }
+          
+          .result-buttons {
+            flex-direction: column;
+          }
+          
+          .winner-name {
+            font-size: 1.2rem;
+          }
+        }
+      `}</style>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    minHeight: '100vh',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '20px'
-  },
-  content: {
-    width: '100%',
-    maxWidth: '700px'
-  },
-  header: {
-    textAlign: 'center',
-    marginBottom: '32px'
-  },
-  title: {
-    fontSize: '48px',
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: '24px',
-    textShadow: '2px 2px 4px rgba(0, 0, 0, 0.2)'
-  },
-  winnerCard: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '20px',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    padding: '32px',
-    borderRadius: '16px',
-    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
-    border: '3px solid #fbbf24'
-  },
-  winnerIcon: {
-    fontSize: '64px'
-  },
-  winnerInfo: {
-    textAlign: 'left'
-  },
-  winnerLabel: {
-    fontSize: '14px',
-    color: '#6b7280',
-    marginBottom: '4px'
-  },
-  winnerName: {
-    fontSize: '32px',
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: '4px'
-  },
-  winnerScore: {
-    fontSize: '20px',
-    color: '#f59e0b',
-    fontWeight: '600'
-  },
-  main: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px'
-  },
-  leaderboard: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    padding: '24px',
-    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-  },
-  leaderboardTitle: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: '20px'
-  },
-  leaderboardList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px'
-  },
-  leaderboardItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-    padding: '16px 20px',
-    backgroundColor: '#f9fafb',
-    borderRadius: '8px',
-    border: '2px solid transparent',
-    transition: 'all 0.2s'
-  },
-  currentPlayerItem: {
-    backgroundColor: '#ede9fe',
-    border: '2px solid #8b5cf6'
-  },
-  firstPlace: {
-    backgroundColor: '#fef3c7'
-  },
-  secondPlace: {
-    backgroundColor: '#f3f4f6'
-  },
-  thirdPlace: {
-    backgroundColor: '#fef2f2'
-  },
-  rank: {
-    fontSize: '32px',
-    fontWeight: 'bold',
-    minWidth: '60px',
-    textAlign: 'center'
-  },
-  playerInfo: {
-    flex: 1
-  },
-  playerName: {
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#1f2937',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  youBadge: {
-    fontSize: '12px',
-    color: '#8b5cf6',
-    backgroundColor: '#ede9fe',
-    padding: '2px 8px',
-    borderRadius: '4px',
-    fontWeight: '600'
-  },
-  score: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    color: '#059669'
-  },
-  stats: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: '12px',
-    padding: '20px',
-    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-  },
-  statsTitle: {
-    fontSize: '18px',
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: '16px'
-  },
-  statsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px'
-  },
-  statItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '16px'
-  },
-  statLabel: {
-    color: '#6b7280'
-  },
-  statValue: {
-    fontWeight: '600',
-    color: '#1f2937'
-  },
-  actions: {
-    display: 'flex',
-    gap: '12px'
-  },
-  playAgainButton: {
-    flex: 1,
-    padding: '16px',
-    fontSize: '18px',
-    fontWeight: '600',
-    color: 'white',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    border: 'none',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
-    transition: 'transform 0.2s'
-  },
-  leaveButton: {
-    flex: 1,
-    padding: '16px',
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#ef4444',
-    backgroundColor: 'white',
-    border: '2px solid #ef4444',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-  loading: {
-    color: 'white',
-    fontSize: '20px',
-    textAlign: 'center'
-  }
-};
 
 export default Result;
