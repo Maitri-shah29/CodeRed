@@ -6,7 +6,7 @@ import socket from '../socket';
 function Result() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { roomCode, playerId, playerName, room: initialRoom } = location.state || {};
+  const { roomCode, playerId, playerName, room: initialRoom, winner: gameWinner, reason: gameReason } = location.state || {};
 
   const [room, setRoom] = useState(initialRoom);
 
@@ -76,13 +76,26 @@ function Result() {
     );
   }
 
-  // Sort players by score
-  const sortedPlayers = [...room.players].sort((a, b) => {
-    return (room.scores[b.id] || 0) - (room.scores[a.id] || 0);
-  });
-
-  const winner = sortedPlayers[0];
-  const isCurrentPlayerWinner = winner?.id === playerId;
+  // Determine winner display based on game outcome
+  let winnerDisplay;
+  let winnersList = [];
+  let losersList = [];
+  
+  if (gameWinner === 'debuggers') {
+    winnerDisplay = '🔍 DEBUGGERS WIN!';
+    // Debuggers won - they are the winners
+    winnersList = room.players.filter(p => room.debuggers.includes(p.id));
+    losersList = room.players.filter(p => p.id === room.bugger);
+  } else if (gameWinner === 'bugger') {
+    winnerDisplay = '🐛 BUGGER WINS!';
+    // Bugger won - they are the winner
+    winnersList = room.players.filter(p => p.id === room.bugger);
+    losersList = room.players.filter(p => room.debuggers.includes(p.id));
+  } else {
+    // Fallback
+    winnerDisplay = 'GAME OVER';
+    winnersList = room.players;
+  }
 
   const playerColors = ['#00ff88', '#00ddff', '#dd00ff', '#ffcc00', '#ff9900', '#ff3366'];
 
@@ -96,44 +109,57 @@ function Result() {
         </div>
 
         {/* Winner Card */}
-        {winner && (
-          <div className="winner-card">
-            <span className="winner-crown">👑</span>
-            <div className="winner-info">
-              <span className="winner-label">WINNER</span>
-              <span className="winner-name">
-                {winner.name} {isCurrentPlayerWinner ? '(You!)' : ''}
-              </span>
-              <span className="winner-points">{room.scores[winner.id] || 0} POINTS</span>
-            </div>
+        <div className="winner-card">
+          <span className="winner-crown">👑</span>
+          <div className="winner-info">
+            <span className="winner-label">WINNER</span>
+            <span className="winner-name">{winnerDisplay}</span>
+            {gameReason && <span className="winner-reason">{gameReason}</span>}
           </div>
-        )}
+        </div>
 
         {/* Final Scores */}
         <div className="scores-card">
-          <h2 className="scores-title">FINAL SCORES</h2>
+          <h2 className="scores-title">WINNERS</h2>
           <div className="scores-list">
-            {sortedPlayers.map((player, index) => (
+            {winnersList.map((player, index) => (
               <div
                 key={player.id}
                 className={`score-row ${player.id === playerId ? 'highlight' : ''}`}
-                style={{ borderColor: playerColors[index % playerColors.length] }}
+                style={{ borderColor: '#00ff88' }}
               >
-                <span className="score-rank">
-                  {index === 0 && '🥇'}
-                  {index === 1 && '🥈'}
-                  {index === 2 && '🥉'}
-                  {index > 2 && `#${index + 1}`}
-                </span>
+                <span className="score-rank">🏆</span>
                 <span className="score-name">{player.name}</span>
                 {player.id === playerId && <span className="you-badge">YOU</span>}
-                <span className="score-points" style={{ color: playerColors[index % playerColors.length] }}>
-                  {room.scores[player.id] || 0}
+                <span className="score-role">
+                  {player.id === room.bugger ? '🐛 Bugger' : '🔍 Debugger'}
                 </span>
               </div>
             ))}
           </div>
         </div>
+
+        {losersList.length > 0 && (
+          <div className="scores-card">
+            <h2 className="scores-title">LOSERS</h2>
+            <div className="scores-list">
+              {losersList.map((player, index) => (
+                <div
+                  key={player.id}
+                  className={`score-row ${player.id === playerId ? 'highlight' : ''}`}
+                  style={{ borderColor: '#ff3366' }}
+                >
+                  <span className="score-rank">❌</span>
+                  <span className="score-name">{player.name}</span>
+                  {player.id === playerId && <span className="you-badge">YOU</span>}
+                  <span className="score-role">
+                    {player.id === room.bugger ? '🐛 Bugger' : '🔍 Debugger'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Game Stats */}
         <div className="stats-card">
@@ -264,6 +290,13 @@ function Result() {
           text-shadow: 0 0 10px #00ff88;
         }
 
+        .winner-reason {
+          font-size: 0.8rem;
+          color: #ffcc00;
+          margin-top: 4px;
+          opacity: 0.9;
+        }
+
         .winner-points {
           font-size: 0.9rem;
           color: #00ddff;
@@ -339,10 +372,11 @@ function Result() {
           border: 1px solid #00ff88;
         }
 
-        .score-points {
-          font-size: 1.1rem;
-          font-weight: bold;
-          text-shadow: 0 0 10px currentColor;
+        .score-role {
+          margin-left: auto;
+          font-size: 0.8rem;
+          color: #00ddff;
+          opacity: 0.9;
         }
 
         /* Stats Card */

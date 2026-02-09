@@ -23,7 +23,8 @@ function CodeEditor({
   roomCode = null,
   playerId = null,
   playerName = 'Anonymous',
-  playerColor = '#00ff88'
+  playerColor = '#00ff88',
+  playerRole = null
 }) {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -400,16 +401,24 @@ function CodeEditor({
       ? yTextRef.current.toString() 
       : (editorRef.current ? editorRef.current.getValue() : '');
     
-    try {
-      const res = await fetch(`${SERVER_URL}/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: currentCode })
+    if (!currentCode) {
+      alert('No code to validate');
+      return;
+    }
+
+    // Use socket instead of HTTP
+    if (window.gameSocket) {
+      window.gameSocket.emit('validateBugFix', (response) => {
+        if (response.success) {
+          const icon = response.bugFixed ? '✅' : '❌';
+          alert(`${icon} ${response.message}`);
+          console.log('Validation result:', response);
+        } else {
+          alert(`Error: ${response.error || 'Validation failed'}`);
+        }
       });
-      const json = await res.json();
-      console.log('Validation result:', json);
-    } catch (err) {
-      console.error('Validation failed:', err);
+    } else {
+      alert('Not connected to game server');
     }
   };
 
@@ -507,7 +516,9 @@ function CodeEditor({
               <button onClick={() => { setLocked(s => !s); }} style={styles.btn}>
                 {locked ? 'Unlock' : 'Lock'}
               </button>
-              <button onClick={validateRemote} style={styles.btn}>Validate</button>
+              {playerRole === 'debugger' && (
+                <button onClick={validateRemote} style={styles.btn}>Validate</button>
+              )}
             </>
           )}
         </div>

@@ -20,8 +20,6 @@ function Game() {
   const [voteData, setVoteData] = useState(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [voteTimeRemaining, setVoteTimeRemaining] = useState(60);
-  const [showFixModal, setShowFixModal] = useState(false);
-  const [fixedCode, setFixedCode] = useState('');
   const [feedback, setFeedback] = useState(null);
   const [showRoleReveal, setShowRoleReveal] = useState(true);
 
@@ -43,7 +41,7 @@ function Game() {
   // Initialize code from room on first render
   useEffect(() => {
     if (room?.currentCode) {
-      setCode(room.currentCode.currentBug.buggedCode);
+      setCode(room.currentCode.initialBuggyCode || room.currentCode.correctCode);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -53,22 +51,28 @@ function Game() {
       return;
     }
 
+    // Make socket available to CodeEditor
+    window.gameSocket = socket;
+
     const handleTimerUpdate = ({ remaining }) => {
       setTimeRemaining(remaining);
     };
 
-    const handlePlayerBuzzed = ({ playerId: buzzerId, playerName: buzzerName }) => {
+    const handlePlayerBuzzed = ({ playerId: buzzerId, playerName: buzzerName, vote }) => {
       setBuzzedPlayerName(buzzerName);
-      if (buzzerId === playerId) {
-        setShowFixModal(true);
-        setFixedCode(codeRef.current);
+      setBuzzedPlayerId(buzzerId);
+      
+      // Show vote modal for ALL players
+      if (vote) {
+        setVoteData(vote);
+        setShowVoteModal(true);
+        setHasVoted(false);
       }
     };
 
     const handleFixSubmitted = ({ playerId: submitterId, isCorrect, correctCode, bugDescription }) => {
       setFeedback({ isCorrect, correctCode, bugDescription, submittedBy: submitterId });
       setBuzzedPlayerName(null);
-      setShowFixModal(false);
       setTimeout(() => setFeedback(null), 5000);
     };
 
@@ -83,21 +87,47 @@ function Game() {
       setShowVoteModal(false);
       setVoteData(null);
       setHasVoted(false);
-      setShowFixModal(false);
       setFeedback(null);
       if (updatedRoom.currentCode) {
-        setCode(updatedRoom.currentCode.currentBug.buggedCode);
+        setCode(updatedRoom.currentCode.initialBuggyCode || updatedRoom.currentCode.correctCode);
       }
     };
 
-    const handleGameEnded = ({ room: updatedRoom }) => {
+    const handleGameEnded = ({ room: updatedRoom, winner, reason }) => {
       navigate("/result", {
-        state: { roomCode, playerId, playerName, room: updatedRoom },
+        state: { roomCode, playerId, playerName, room: updatedRoom, winner, reason },
       });
     };
 
     const handlePlayerLeft = ({ room: updatedRoom }) => {
       setRoom(updatedRoom);
+    };
+
+    const handleVoteTimeUpdate = ({ remaining }) => {
+      setVoteTimeRemaining(remaining);
+    };
+
+    const handleBuzzVoteUpdated = ({ vote }) => {
+      setVoteData(vote);
+    };
+
+    const handleBuzzVoteEnded = ({ shouldKick, kickedPlayerName, room: updatedRoom }) => {
+      setShowVoteModal(false);
+      setVoteData(null);
+      setHasVoted(false);
+      setBuzzedPlayerName(null);
+      setBuzzedPlayerId(null);
+      setRoom(updatedRoom);
+      
+      if (shouldKick && kickedPlayerName) {
+        // Show notification that player was kicked
+        setFeedback({ 
+          isCorrect: false, 
+          message: `${kickedPlayerName} was voted out!`,
+          submittedBy: null 
+        });
+        setTimeout(() => setFeedback(null), 3000);
+      }
     };
 
     socket.on("timerUpdate", handleTimerUpdate);
@@ -107,6 +137,9 @@ function Game() {
     socket.on("roundStarted", handleRoundStarted);
     socket.on("gameEnded", handleGameEnded);
     socket.on("playerLeft", handlePlayerLeft);
+    socket.on("voteTimeUpdate", handleVoteTimeUpdate);
+    socket.on("buzzVoteUpdated", handleBuzzVoteUpdated);
+    socket.on("buzzVoteEnded", handleBuzzVoteEnded);
 
     return () => {
       socket.off("timerUpdate", handleTimerUpdate);
@@ -116,6 +149,14 @@ function Game() {
       socket.off("roundStarted", handleRoundStarted);
       socket.off("gameEnded", handleGameEnded);
       socket.off("playerLeft", handlePlayerLeft);
+      socket.off("voteTimeUpdate", handleVoteTimeUpdate);
+      socket.off("buzzVoteUpdated", handleBuzzVoteUpdated);
+      socket.off("buzzVoteEnded", handleBuzzVoteEnded);
+      
+      // Cleanup global socket reference
+      if (window.gameSocket) {
+        delete window.gameSocket;
+      }
     };
   }, [roomCode, playerId, playerName, navigate]);
 
@@ -151,13 +192,7 @@ function Game() {
     });
   };
 
-  const handleSubmitFix = () => {
-    socket.emit('submitFix', { fixedCode }, (response) => {
-      if (!response.success) {
-        alert('Failed to submit fix');
-      }
-    });
-  };
+
 
   const handleCodeChange = (newCode) => {
     setCode(newCode);
@@ -207,9 +242,16 @@ function Game() {
   const isBugger = currentPlayer?.role === 'bugger';
   const isDisabled = currentPlayer?.disabled;
   const canBuzz = !isBugger && !buzzedPlayerName && !isDisabled;
-
-  const bugsList = room.currentCode?.currentBug ? [
-    { id: 1, title: room.currentCode.currentBug.description, location: room.currentCode.title }
+  
+  // Get bug assignment for current debugger (bugAssignments is now a plain object)
+  const myBugAssignment = room.currentCode?.bugAssignments?.[playerId];
+  const bugsList = myBugAssignment ? [
+    { 
+      id: myBugAssignment.id, 
+      title: myBugAssignment.description, 
+      location: myBugAssignment.location,
+      difficulty: myBugAssignment.difficulty 
+    }
   ] : [];
 
   const playerColors = ['#00ddff', '#00ff88', '#dd00ff', '#ffcc00', '#ff9900', '#ff3366'];
@@ -336,6 +378,7 @@ function Game() {
                 playerId={playerId}
                 playerName={playerName}
                 playerColor={playerColors[room.players.findIndex(p => p.id === playerId) % playerColors.length]}
+                playerRole={currentPlayer?.role}
               />
             )}
           </div>
@@ -377,38 +420,16 @@ function Game() {
         onSkipVote={handleSkipVote}
       />
 
-      {/* Fix Modal */}
-      {showFixModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h2>Submit Your Fix</h2>
-            <p>Edit the code below to fix the bug you found:</p>
-            <CodeEditor
-              code={fixedCode}
-              onChange={setFixedCode}
-              language={room.currentCode.language}
-              height="400px"
-            />
-            <div className="modal-actions">
-              <button onClick={handleSubmitFix} className="submit-btn">
-                Submit Fix
-              </button>
-              <button onClick={() => setShowFixModal(false)} className="cancel-btn">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Feedback */}
       {feedback && (
         <div className={`feedback ${feedback.isCorrect ? 'success' : 'error'}`}>
           <div className="feedback-title">
-            {feedback.isCorrect ? '✅ Correct Fix!' : '❌ Incorrect Fix'}
+            {feedback.isCorrect ? '✅ Correct Fix!' : feedback.message ? '📢' : '❌ Incorrect Fix'}
           </div>
           <div className="feedback-text">
-            <strong>Bug:</strong> {feedback.bugDescription}
+            {feedback.message || (
+              <><strong>Bug:</strong> {feedback.bugDescription}</>
+            )}
           </div>
         </div>
       )}

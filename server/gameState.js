@@ -9,140 +9,129 @@ const codeSamples = [
   {
     id: 1,
     language: "javascript",
-    title: "Array Sum Function",
-    correctCode: `function sumArray(arr) {
-  let sum = 0;
-  for (let i = 0; i < arr.length; i++) {
-    sum += arr[i];
+    title: "Scientific Calculator",
+    correctCode: `class ScientificCalculator {
+  constructor() {
+    this.memory = 0;
+    this.history = [];
   }
-  return sum;
+
+  // Basic Operations
+  add(a, b) {
+    const result = a + b;
+    this.history.push(\`\${a} + \${b} = \${result}\`);
+    return result;
+  }
+
+  subtract(a, b) {
+    const result = a - b;
+    this.history.push(\`\${a} - \${b} = \${result}\`);
+    return result;
+  }
+
+  multiply(a, b) {
+    const result = a * b;
+    this.history.push(\`\${a} * \${b} = \${result}\`);
+    return result;
+  }
+
+  divide(a, b) {
+    if (b === 0) {
+      throw new Error('Cannot divide by zero');
+    }
+    const result = a / b;
+    this.history.push(\`\${a} / \${b} = \${result}\`);
+    return result;
+  }
+
+  power(base, exponent) {
+    const result = Math.pow(base, exponent);
+    this.history.push(\`\${base} ^ \${exponent} = \${result}\`);
+    return result;
+  }
+
+  squareRoot(n) {
+    if (n < 0) {
+      throw new Error('Cannot calculate square root of negative number');
+    }
+    const result = Math.sqrt(n);
+    this.history.push(\`√\${n} = \${result}\`);
+    return result;
+  }
+
+  increment(n) {
+    const result = n + 1;
+    this.history.push(\`++\${n} = \${result}\`);
+    return result;
+  }
+
+  decrement(n) {
+    const result = n - 1;
+    this.history.push(\`--\${n} = \${result}\`);
+    return result;
+  }
+
+
+  // Memory Operations
+  memoryStore(value) {
+    this.memory = value;
+    this.history.push(\`Memory stored: \${value}\`);
+    return this.memory;
+  }
+
+  memoryRecall() {
+    this.history.push(\`Memory recalled: \${this.memory}\`);
+    return this.memory;
+  }
+
+  memoryClear() {
+    this.memory = 0;
+    this.history.push('Memory cleared');
+    return this.memory;
+  }
+
+  getHistory() {
+    return this.history;
+  }
+
+  clearHistory() {
+    this.history = [];
+    return 'History cleared';
+  }
 }`,
     bugs: [
       {
-        buggedCode: `function sumArray(arr) {
-  let sum = 0;
-  for (let i = 0; i <= arr.length; i++) {
-    sum += arr[i];
-  }
-  return sum;
-}`,
-        description:
-          "Off-by-one error: i <= arr.length should be i < arr.length",
+        id: "bug1",
+        description: "Subtract method returns 'b - a' instead of 'a - b'",
+        location: "Line 19",
+        difficulty: "easy"
       },
       {
-        buggedCode: `function sumArray(arr) {
-  let sum = 1;
-  for (let i = 0; i < arr.length; i++) {
-    sum += arr[i];
-  }
-  return sum;
-}`,
-        description: "Wrong initialization: sum should start at 0, not 1",
+        id: "bug2",
+        description: "Increment method subtracts 1 instead of adding 1",
+        location: "Line 59",
+        difficulty: "easy"
       },
       {
-        buggedCode: `function sumArray(arr) {
-  let sum = 0;
-  for (let i = 1; i < arr.length; i++) {
-    sum += arr[i];
-  }
-  return sum;
-}`,
-        description: "Skipping first element: i should start at 0, not 1",
-      },
-    ],
-  },
-  {
-    id: 2,
-    language: "javascript",
-    title: "Find Maximum Value",
-    correctCode: `function findMax(numbers) {
-  if (numbers.length === 0) return null;
-  let max = numbers[0];
-  for (let i = 1; i < numbers.length; i++) {
-    if (numbers[i] > max) {
-      max = numbers[i];
-    }
-  }
-  return max;
-}`,
-    bugs: [
-      {
-        buggedCode: `function findMax(numbers) {
-  if (numbers.length === 0) return null;
-  let max = 0;
-  for (let i = 1; i < numbers.length; i++) {
-    if (numbers[i] > max) {
-      max = numbers[i];
-    }
-  }
-  return max;
-}`,
-        description: "Wrong initialization: max should be numbers[0], not 0",
+        id: "bug3",
+        description: "Divide method missing zero check before division",
+        location: "Line 33",
+        difficulty: "medium"
       },
       {
-        buggedCode: `function findMax(numbers) {
-  if (numbers.length === 0) return null;
-  let max = numbers[0];
-  for (let i = 1; i < numbers.length; i++) {
-    if (numbers[i] >= max) {
-      max = numbers[i];
-    }
-  }
-  return max;
-}`,
-        description: "Wrong comparison: should be >, not >=",
+        id: "bug4",
+        description: "squareRoot missing check for negative numbers",
+        location: "Line 49",
+        difficulty: "medium"
       },
       {
-        buggedCode: `function findMax(numbers) {
-  if (numbers.length === 0) return null;
-  let max = numbers[0];
-  for (let i = 0; i < numbers.length; i++) {
-    if (numbers[i] > max) {
-      max = numbers[i];
-    }
+        id: "bug5",
+        description: "memoryStore returns 0 instead of stored value",
+        location: "Line 123",
+        difficulty: "hard"
+      }
+    ]
   }
-  return max;
-}`,
-        description: "Redundant comparison: loop should start at i = 1",
-      },
-    ],
-  },
-  {
-    id: 3,
-    language: "javascript",
-    title: "String Reversal",
-    correctCode: `function reverseString(str) {
-  let reversed = '';
-  for (let i = str.length - 1; i >= 0; i--) {
-    reversed += str[i];
-  }
-  return reversed;
-}`,
-    bugs: [
-      {
-        buggedCode: `function reverseString(str) {
-  let reversed = '';
-  for (let i = str.length; i >= 0; i--) {
-    reversed += str[i];
-  }
-  return reversed;
-}`,
-        description:
-          "Off-by-one: i should start at str.length - 1, not str.length",
-      },
-      {
-        buggedCode: `function reverseString(str) {
-  let reversed = '';
-  for (let i = str.length - 1; i > 0; i--) {
-    reversed += str[i];
-  }
-  return reversed;
-}`,
-        description:
-          "Missing last character: condition should be i >= 0, not i > 0",
-      },
-    ],
-  },
 ];
 
 function createRoom(roomCode, hostId, hostName) {
@@ -159,9 +148,10 @@ function createRoom(roomCode, hostId, hostName) {
     currentBug: null,
     bugger: null,
     debuggers: [],
-    scores: new Map(),
     buzzedPlayer: null,
     activeVote: null,
+    winner: null,
+    winReason: null,
     createdAt: Date.now(),
   };
 
@@ -175,7 +165,6 @@ function createRoom(roomCode, hostId, hostName) {
     disabled: false,
   });
 
-  room.scores.set(hostId, 0);
   rooms.set(roomCode, room);
 
   return room;
@@ -220,8 +209,6 @@ function addPlayerToRoom(roomCode, playerId, playerName) {
     room.hostId = playerId;
   }
 
-  room.scores.set(playerId, 0);
-
   return room;
 }
 
@@ -230,7 +217,6 @@ function removePlayerFromRoom(roomCode, playerId) {
   if (!room) return null;
 
   room.players.delete(playerId);
-  room.scores.delete(playerId);
 
   // If host left, assign new host
   if (room.hostId === playerId) {
@@ -290,14 +276,77 @@ function assignRoles(room) {
   });
 }
 
+function injectBug(correctCode, bugId) {
+  // Inject specific bug into the correct code
+  let buggedCode = correctCode;
+  
+  switch(bugId) {
+    case 'bug1': // Subtract: b - a instead of a - b
+      buggedCode = buggedCode.replace(
+        /subtract\(a, b\)\s*{\s*const result = a - b;/,
+        'subtract(a, b) {\n    const result = b - a;'
+      );
+      break;
+      
+    case 'bug2': // Increment: subtract instead of add
+      buggedCode = buggedCode.replace(
+        /increment\(n\)\s*{\s*const result = n \+ 1;/,
+        'increment(n) {\n    const result = n - 1;'
+      );
+      break;
+      
+    case 'bug3': // Divide: missing zero check
+      buggedCode = buggedCode.replace(
+        /divide\(a, b\)\s*{\s*if \(b === 0\) {\s*throw new Error\('Cannot divide by zero'\);\s*}\s*/,
+        'divide(a, b) {\n    '
+      );
+      break;
+      
+    case 'bug4': // SquareRoot: missing negative check
+      buggedCode = buggedCode.replace(
+        /squareRoot\(n\)\s*{\s*if \(n < 0\) {\s*throw new Error\('Cannot calculate square root of negative number'\);\s*}\s*/,
+        'squareRoot(n) {\n    '
+      );
+      break;
+      
+    case 'bug5': // MemoryStore: return 0 instead of value
+      buggedCode = buggedCode.replace(
+        /memoryStore\(value\)\s*{\s*this\.memory = value;\s*this\.history\.push\([^)]+\);\s*return this\.memory;/,
+        'memoryStore(value) {\n    this.memory = value;\n    this.history.push(`Memory stored: ${value}`);\n    return 0;'
+      );
+      break;
+  }
+  
+  return buggedCode;
+}
+
 function startRound(room) {
-  // Select random code sample
-  const sample = randomElement(codeSamples);
-  const bug = randomElement(sample.bugs);
+  // Select the calculator code sample
+  const sample = codeSamples[0];
+  
+  // Assign bugs randomly to debuggers (fixers)
+  const availableBugs = [...sample.bugs];
+  const bugAssignments = new Map(); // debuggerId -> bug
+  
+  room.debuggers.forEach(debuggerId => {
+    if (availableBugs.length > 0) {
+      const randomIndex = Math.floor(Math.random() * availableBugs.length);
+      const assignedBug = availableBugs.splice(randomIndex, 1)[0];
+      bugAssignments.set(debuggerId, assignedBug);
+    }
+  });
+
+  // Create initial buggy code with ALL assigned bugs injected
+  let initialBuggyCode = sample.correctCode;
+  bugAssignments.forEach((bug) => {
+    initialBuggyCode = injectBug(initialBuggyCode, bug.id);
+  });
 
   room.currentCode = {
     ...sample,
-    currentBug: bug,
+    bugAssignments, // Store which bug each fixer needs to fix
+    correctCode: sample.correctCode, // Store correct code for validation
+    initialBuggyCode // Code with all bugs injected at start
   };
 
   room.roundStartTime = Date.now();
@@ -484,16 +533,6 @@ function validateFix(roomCode, playerId, fixedCode) {
 
   const isCorrect = fixedCode.trim() === room.currentCode.correctCode.trim();
 
-  if (isCorrect) {
-    // Award points to debugger
-    const currentScore = room.scores.get(playerId) || 0;
-    room.scores.set(playerId, currentScore + 10);
-  } else {
-    // Penalty for wrong fix
-    const currentScore = room.scores.get(playerId) || 0;
-    room.scores.set(playerId, Math.max(0, currentScore - 5));
-  }
-
   return { isCorrect, room };
 }
 
@@ -531,19 +570,68 @@ function checkDebuggersWin(room) {
   return buggerDisabled;
 }
 
-function endRound(roomCode) {
+function endRound(roomCode, finalCode = null) {
   const room = rooms.get(roomCode);
   if (!room) return null;
-
-  // If no one buzzed, bugger gets points
-  if (!room.buzzedPlayer) {
-    const currentScore = room.scores.get(room.bugger) || 0;
-    room.scores.set(room.bugger, currentScore + 15);
-  }
 
   // Check if game is over
   if (room.currentRound >= room.totalRounds) {
     room.gameState = "results";
+    
+    // Determine winner based on code quality
+    let codeHasErrors = false;
+    let errorDetails = [];
+    
+    if (finalCode && room.currentCode) {
+      // Bug 1: subtract should be 'a - b', not 'b - a'
+      if (finalCode.includes('result = b - a')) {
+        codeHasErrors = true;
+        errorDetails.push('Subtract bug: returns b - a instead of a - b');
+      }
+      
+      // Bug 2: increment should add 1, not subtract
+      if (finalCode.match(/increment\([^)]*\)\s*{[^}]*n\s*-\s*1/s)) {
+        codeHasErrors = true;
+        errorDetails.push('Increment bug: subtracts instead of adds');
+      }
+      
+      // Bug 3: divide missing zero check
+      const divideMatch = finalCode.match(/divide\([^)]*\)\s*{[^}]*return/s);
+      if (divideMatch && !divideMatch[0].includes('=== 0')) {
+        codeHasErrors = true;
+        errorDetails.push('Divide bug: missing zero check');
+      }
+      
+      // Bug 4: squareRoot missing negative check
+      const sqrtMatch = finalCode.match(/squareRoot\([^)]*\)\s*{[^}]*return/s);
+      if (sqrtMatch && !sqrtMatch[0].includes('< 0')) {
+        codeHasErrors = true;
+        errorDetails.push('SquareRoot bug: missing negative check');
+      }
+      
+      // Bug 5: memoryStore returning wrong value
+      if (finalCode.match(/memoryStore\([^)]*\)\s*{[^}]*return\s+0/s)) {
+        codeHasErrors = true;
+        errorDetails.push('MemoryStore bug: returns 0 instead of value');
+      }
+      
+      // Check for syntax errors
+      try {
+        new Function(finalCode);
+      } catch (e) {
+        codeHasErrors = true;
+        errorDetails.push('Syntax error: ' + e.message);
+      }
+    }
+    
+    // Determine winner
+    if (codeHasErrors) {
+      room.winner = "bugger";
+      room.winReason = `Sabotager wins! ${errorDetails.length > 0 ? errorDetails.join(', ') : 'Bugs still in code'}`;
+    } else {
+      room.winner = "debuggers";
+      room.winReason = "Fixers win! All bugs resolved!";
+    }
   } else {
     room.currentRound++;
     assignRoles(room); // Rotate roles
@@ -565,11 +653,9 @@ function resetGame(roomCode) {
   room.debuggers = [];
   room.buzzedPlayer = null;
   room.activeVote = null;
+  room.winner = null;
+  room.winReason = null;
 
-  // Reset scores
-  room.scores.forEach((_, playerId) => {
-    room.scores.set(playerId, 0);
-  });
 
   // Reset ready status and disabled state
   room.players.forEach((player) => {

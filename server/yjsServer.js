@@ -188,6 +188,18 @@ function initializeRoomCode(roomCode, initialCode) {
 }
 
 /**
+ * Get current code from Yjs document
+ */
+function getCurrentCode(roomCode) {
+  if (!docs.has(roomCode)) {
+    return null;
+  }
+  const { doc } = docs.get(roomCode);
+  const yText = doc.getText('code');
+  return yText.toString();
+}
+
+/**
  * Clean up a room's Yjs document
  */
 function cleanupRoom(roomCode) {
@@ -203,5 +215,6 @@ module.exports = {
   setupYjsServer,
   getYDoc,
   initializeRoomCode,
+  getCurrentCode,
   cleanupRoom
 };

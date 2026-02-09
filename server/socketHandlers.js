@@ -22,12 +22,13 @@ const {
   isValidPlayerName,
 } = require("./utils");
 
-const { initializeRoomCode, cleanupRoom } = require('./yjsServer');
+const { initializeRoomCode, getCurrentCode, cleanupRoom } = require('./yjsServer');
 
 // Track socket to player/room mappings
 const socketToPlayer = new Map();
 const playerToSocket = new Map();
 const buzzVoteTimers = new Map();
+const roundTimers = new Map(); // Store round timer intervals
 
 /**
  * Setup all socket event handlers
@@ -180,7 +181,7 @@ function setupSocketHandlers(io) {
       // Initialize Yjs doc BEFORE emitting gameStarted so clients get
       // the correct content when they connect their WebSocket
       if (result.currentCode) {
-        initializeRoomCode(roomCode, result.currentCode.currentBug.buggedCode);
+        initializeRoomCode(roomCode, result.currentCode.initialBuggyCode);
       }
 
       io.to(roomCode).emit("gameStarted", {
@@ -208,6 +209,9 @@ function setupSocketHandlers(io) {
 
       if (result) {
         const player = result.players.get(playerId);
+
+        // Pause the game timer
+        pauseRoundTimer(io, roomCode);
 
         // Notify that player buzzed and vote started
         io.to(roomCode).emit("playerBuzzed", {
@@ -278,7 +282,7 @@ function setupSocketHandlers(io) {
         playerName: room.players.get(playerId).name,
         isCorrect,
         correctCode: room.currentCode.correctCode,
-        bugDescription: room.currentCode.currentBug.description,
+        bugDescription: "Code submitted for review",
       });
 
       // Clear buzzed player
@@ -427,10 +431,21 @@ function startRoundTimer(io, roomCode) {
   const room = getRoom(roomCode);
   if (!room) return;
 
+  // Clear any existing timer
+  if (roundTimers.has(roomCode)) {
+    clearInterval(roundTimers.get(roomCode));
+  }
+
   const timer = setInterval(() => {
     const room = getRoom(roomCode);
     if (!room || room.gameState !== "playing") {
       clearInterval(timer);
+      roundTimers.delete(roomCode);
+      return;
+    }
+
+    // Skip if timer is paused
+    if (room.timerPaused) {
       return;
     }
 
@@ -441,16 +456,59 @@ function startRoundTimer(io, roomCode) {
 
     if (remaining <= 0) {
       clearInterval(timer);
+      roundTimers.delete(roomCode);
       handleEndRound(io, roomCode);
     }
   }, 1000);
+
+  roundTimers.set(roomCode, timer);
+}
+
+/**
+ * Pause round timer
+ */
+function pauseRoundTimer(io, roomCode) {
+  const room = getRoom(roomCode);
+  if (!room || room.timerPaused) return;
+
+  // Calculate and store remaining time
+  const elapsed = Math.floor((Date.now() - room.roundStartTime) / 1000);
+  const remaining = room.roundDuration - elapsed;
+  
+  room.timerPaused = true;
+  room.pausedTimeRemaining = Math.max(0, remaining);
+  
+  console.log(`Timer paused in room ${roomCode}, remaining: ${room.pausedTimeRemaining}s`);
+}
+
+/**
+ * Resume round timer
+ */
+function resumeRoundTimer(io, roomCode) {
+  const room = getRoom(roomCode);
+  if (!room || !room.timerPaused) return;
+
+  // Reset start time based on paused remaining time
+  room.roundStartTime = Date.now() - ((room.roundDuration - room.pausedTimeRemaining) * 1000);
+  room.timerPaused = false;
+  delete room.pausedTimeRemaining;
+  
+  console.log(`Timer resumed in room ${roomCode}`);
+  
+  // Emit immediate update
+  const elapsed = Math.floor((Date.now() - room.roundStartTime) / 1000);
+  const remaining = room.roundDuration - elapsed;
+  io.to(roomCode).emit("timerUpdate", { remaining });
 }
 
 /**
  * Handle end of round
  */
 function handleEndRound(io, roomCode) {
-  const room = endRound(roomCode);
+  // Get the final code from Yjs
+  const finalCode = getCurrentCode(roomCode);
+  
+  const room = endRound(roomCode, finalCode);
 
   if (!room) return;
 
@@ -458,6 +516,8 @@ function handleEndRound(io, roomCode) {
     // Game over - show final results
     io.to(roomCode).emit("gameEnded", {
       room: serializeRoom(room),
+      winner: room.winner || null,
+      reason: room.winReason || "Game completed",
     });
     // Clean up Yjs document
     cleanupRoom(roomCode);
@@ -471,7 +531,7 @@ function handleEndRound(io, roomCode) {
     setTimeout(() => {
       // Initialize Yjs doc with the new round's code
       if (room.currentCode) {
-        initializeRoomCode(roomCode, room.currentCode.currentBug.buggedCode);
+        initializeRoomCode(roomCode, room.currentCode.initialBuggyCode);
       }
 
       io.to(roomCode).emit("roundStarted", {
@@ -604,6 +664,15 @@ function handleBuzzVoteEnd(io, roomCode) {
     room.buzzedPlayer = null;
     clearBuzzVote(roomCode);
     buzzVoteTimers.delete(roomCode);
+    
+    // Resume the game timer
+    resumeRoundTimer(io, roomCode);
+    
+    io.to(roomCode).emit("buzzVoteEnded", {
+      shouldKick: false,
+      kickedPlayerName: null,
+      room: serializeRoom(room),
+    });
     return;
   }
 
@@ -656,6 +725,15 @@ function handleBuzzVoteEnd(io, roomCode) {
   room.buzzedPlayer = null;
   clearBuzzVote(roomCode);
   buzzVoteTimers.delete(roomCode);
+  
+  // Resume the game timer
+  resumeRoundTimer(io, roomCode);
+  
+  io.to(roomCode).emit("buzzVoteEnded", {
+    shouldKick,
+    kickedPlayerName,
+    room: serializeRoom(room),
+  });
 }
 
 /**
@@ -667,6 +745,15 @@ function serializeRoom(room) {
     return null;
   }
 
+  // Convert bugAssignments Map to a plain object for serialization
+  let currentCodeSerialized = room.currentCode;
+  if (room.currentCode && room.currentCode.bugAssignments) {
+    currentCodeSerialized = {
+      ...room.currentCode,
+      bugAssignments: Object.fromEntries(room.currentCode.bugAssignments)
+    };
+  }
+
   const serialized = {
     code: room.code,
     hostId: room.hostId,
@@ -674,10 +761,9 @@ function serializeRoom(room) {
     gameState: room.gameState,
     currentRound: room.currentRound,
     totalRounds: room.totalRounds,
-    currentCode: room.currentCode,
+    currentCode: currentCodeSerialized,
     bugger: room.bugger,
     debuggers: room.debuggers,
-    scores: Object.fromEntries(room.scores),
     buzzedPlayer: room.buzzedPlayer,
     activeVote: serializeBuzzVote(room.activeVote),
   };
