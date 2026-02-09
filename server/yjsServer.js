@@ -155,14 +155,21 @@ function setupYjsServer(server) {
 }
 
 /**
- * Initialize a room's code in the Yjs document
+ * Initialize (or reset) a room's code in the Yjs document
  */
 function initializeRoomCode(roomCode, initialCode) {
   const { doc } = getYDoc(roomCode);
   const yText = doc.getText('code');
-  if (yText.length === 0 && initialCode) {
-    yText.insert(0, initialCode);
-  }
+  doc.transact(() => {
+    // Clear existing content first (handles round changes)
+    if (yText.length > 0) {
+      yText.delete(0, yText.length);
+    }
+    if (initialCode) {
+      yText.insert(0, initialCode);
+    }
+  });
+  console.log(`Initialized Yjs doc for room ${roomCode} (${initialCode?.length || 0} chars)`);
 }
 
 /**

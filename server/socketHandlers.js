@@ -22,6 +22,8 @@ const {
   isValidPlayerName,
 } = require("./utils");
 
+const { initializeRoomCode, cleanupRoom } = require('./yjsServer');
+
 // Track socket to player/room mappings
 const socketToPlayer = new Map();
 const playerToSocket = new Map();
@@ -199,6 +201,11 @@ function setupSocketHandlers(io) {
         room: serializeRoom(result),
       });
 
+      // Initialize Yjs doc with the round's code so all editors start in sync
+      if (result.currentCode) {
+        initializeRoomCode(roomCode, result.currentCode.currentBug.buggedCode);
+      }
+
       // Start round timer
       startRoundTimer(io, roomCode);
 
@@ -302,7 +309,7 @@ function setupSocketHandlers(io) {
       }, 3000);
     });
 
-    // SUBMIT BUG (from bugger)
+    // SUBMIT BUG (from bugger) — updates server state only, Yjs handles real-time sync
     socket.on("submitBug", ({ buggedCode }, callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -315,36 +322,11 @@ function setupSocketHandlers(io) {
         return;
       }
 
-      // Update the bugged code
+      // Update server-side game state (used for fix validation)
       room.currentCode.buggedCode = buggedCode;
 
       if (callback) callback({ success: true });
-
-      // Notify debuggers that code was updated
-      socket.to(roomCode).emit('codeUpdated', {
-        code: buggedCode
-      });
-    });
-
-    // CODE CHANGE (real-time sync for collaborative editing)
-    socket.on('codeChange', ({ content }) => {
-      const playerData = socketToPlayer.get(socket.id);
-      if (!playerData) return;
-
-      const { playerId, roomCode } = playerData;
-      const room = getRoom(roomCode);
-      if (!room) return;
-
-      // Update room's current code if applicable
-      if (room.currentCode) {
-        room.currentCode.buggedCode = content;
-      }
-
-      // Broadcast to all other players in the room
-      socket.to(roomCode).emit('codeUpdated', {
-        code: content,
-        fromPlayerId: playerId
-      });
+      // NOTE: No codeUpdated broadcast — Yjs WebSocket handles real-time sync
     });
 
     // CURSOR UPDATE (broadcast cursor position to other players)
@@ -496,6 +478,8 @@ function handleEndRound(io, roomCode) {
     io.to(roomCode).emit("gameEnded", {
       room: serializeRoom(room),
     });
+    // Clean up Yjs document
+    cleanupRoom(roomCode);
   } else {
     // Next round
     io.to(roomCode).emit("roundEnded", {
@@ -504,6 +488,11 @@ function handleEndRound(io, roomCode) {
 
     // Start next round after brief delay
     setTimeout(() => {
+      // Initialize Yjs doc with the new round's code
+      if (room.currentCode) {
+        initializeRoomCode(roomCode, room.currentCode.currentBug.buggedCode);
+      }
+
       io.to(roomCode).emit("roundStarted", {
         room: serializeRoom(room),
       });
