@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import socket from '../socket';
-import CodeEditor from '../components/CodeEditor';
-import VoteModal from '../components/VoteModal';
-import RoleReveal from '../components/RoleReveal';
-import { Bell, LogOut } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import socket from "../socket";
+import CodeEditor from "../components/CodeEditor";
+import { Bell, LogOut } from "lucide-react";
 
 function Game() {
   const navigate = useNavigate();
@@ -25,104 +23,58 @@ function Game() {
   const [feedback, setFeedback] = useState(null);
   const [showRoleReveal, setShowRoleReveal] = useState(true);
 
+  // Refs for values that change often but are read inside event handlers
+  const codeRef = useRef(code);
+  const roomRef = useRef(room);
+  useEffect(() => { codeRef.current = code; }, [code]);
+  useEffect(() => { roomRef.current = room; }, [room]);
+
+  // Debounced submitBug — only for server state tracking, not real-time sync
+  const submitBugTimerRef = useRef(null);
+  const debouncedSubmitBug = useCallback((newCode) => {
+    if (submitBugTimerRef.current) clearTimeout(submitBugTimerRef.current);
+    submitBugTimerRef.current = setTimeout(() => {
+      socket.emit("submitBug", { buggedCode: newCode });
+    }, 500);
+  }, []);
+
+  // Initialize code from room on first render
   useEffect(() => {
-    if (!roomCode || !playerId || !room) {
-      navigate('/');
+    if (room?.currentCode) {
+      setCode(room.currentCode.currentBug.buggedCode);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!roomCode || !playerId) {
+      navigate("/");
       return;
     }
 
-    if (room.currentCode) {
-      if (getCurrentPlayer()?.role === 'bugger') {
-        setCode(room.currentCode.currentBug.buggedCode);
-      } else {
-        setCode(room.currentCode.currentBug.buggedCode);
-      }
-    }
-
-    // Socket event listeners
-    socket.on('timerUpdate', ({ remaining }) => {
+    const handleTimerUpdate = ({ remaining }) => {
       setTimeRemaining(remaining);
-    });
+    };
 
-    socket.on('playerBuzzed', ({ playerId: buzzerId, playerName, vote }) => {
-      setBuzzedPlayerName(playerName);
-      setBuzzedPlayerId(buzzerId);
-      setVoteData(vote);
-      setShowVoteModal(true);
-      setHasVoted(false);
-      setVoteTimeRemaining(60);
-    });
-
-    socket.on('buzzVoteUpdated', ({ vote }) => {
-      setVoteData(vote);
-    });
-
-    socket.on('voteTimeUpdate', ({ remaining }) => {
-      setVoteTimeRemaining(remaining);
-    });
-
-    socket.on('buzzVoteEnded', ({
-      shouldKick,
-      kickedPlayerName,
-      maxVotes,
-      hasClearMajority,
-      reason,
-    }) => {
-      setShowVoteModal(false);
-      setBuzzedPlayerName(null);
-      setBuzzedPlayerId(null);
-      setHasVoted(false);
-
-      if (shouldKick && hasClearMajority) {
-        alert(`${kickedPlayerName} was disabled with ${maxVotes} votes!`);
-      } else if (!hasClearMajority) {
-        alert(reason || 'No clear majority - game continues!');
+    const handlePlayerBuzzed = ({ playerId: buzzerId, playerName: buzzerName }) => {
+      setBuzzedPlayerName(buzzerName);
+      if (buzzerId === playerId) {
+        setShowFixModal(true);
+        setFixedCode(codeRef.current);
       }
-    });
+    };
 
-    socket.on('playerDisabled', ({ playerId: disabledId, playerName, room: updatedRoom }) => {
-      setRoom(updatedRoom);
-      if (disabledId === playerId) {
-        alert(`You were disabled and can no longer buzz or vote!`);
-      }
-    });
-
-    socket.on('voteCancelled', ({ reason }) => {
-      setShowVoteModal(false);
+    const handleFixSubmitted = ({ playerId: submitterId, isCorrect, correctCode, bugDescription }) => {
+      setFeedback({ isCorrect, correctCode, bugDescription, submittedBy: submitterId });
       setBuzzedPlayerName(null);
-      setBuzzedPlayerId(null);
-      setHasVoted(false);
-      if (reason) {
-        alert(`Vote cancelled: ${reason}`);
-      }
-    });
-
-    socket.on('codeUpdated', ({ code: newCode }) => {
-      setCode(newCode);
-    });
-
-    socket.on('fixSubmitted', ({ playerId: submitterId, isCorrect, correctCode, bugDescription }) => {
-      setFeedback({
-        isCorrect,
-        correctCode,
-        bugDescription,
-        submittedBy: submitterId
-      });
-      setBuzzedPlayerName(null);
-      setBuzzedPlayerId(null);
-      setShowVoteModal(false);
       setShowFixModal(false);
+      setTimeout(() => setFeedback(null), 5000);
+    };
 
-      setTimeout(() => {
-        setFeedback(null);
-      }, 5000);
-    });
-
-    socket.on('roundEnded', ({ room: updatedRoom }) => {
+    const handleRoundEnded = ({ room: updatedRoom }) => {
       setRoom(updatedRoom);
-    });
+    };
 
-    socket.on('roundStarted', ({ room: updatedRoom }) => {
+    const handleRoundStarted = ({ room: updatedRoom }) => {
       setRoom(updatedRoom);
       setBuzzedPlayerName(null);
       setBuzzedPlayerId(null);
@@ -131,50 +83,39 @@ function Game() {
       setHasVoted(false);
       setShowFixModal(false);
       setFeedback(null);
-      
       if (updatedRoom.currentCode) {
-        const currentPlayer = updatedRoom.players.find((p) => p.id === playerId);
-        if (currentPlayer?.role === 'bugger') {
-          setCode(updatedRoom.currentCode.currentBug.buggedCode);
-        } else {
-          setCode(updatedRoom.currentCode.currentBug.buggedCode);
-        }
+        setCode(updatedRoom.currentCode.currentBug.buggedCode);
       }
-    });
+    };
 
-    socket.on('gameEnded', ({ room: updatedRoom, winner, reason }) => {
-      navigate('/result', {
-        state: {
-          roomCode,
-          playerId,
-          playerName,
-          room: updatedRoom,
-          winner,
-          reason
-        }
+    const handleGameEnded = ({ room: updatedRoom }) => {
+      navigate("/result", {
+        state: { roomCode, playerId, playerName, room: updatedRoom },
       });
-    });
+    };
 
-    socket.on('playerLeft', ({ room: updatedRoom }) => {
+    const handlePlayerLeft = ({ room: updatedRoom }) => {
       setRoom(updatedRoom);
-    });
+    };
+
+    socket.on("timerUpdate", handleTimerUpdate);
+    socket.on("playerBuzzed", handlePlayerBuzzed);
+    socket.on("fixSubmitted", handleFixSubmitted);
+    socket.on("roundEnded", handleRoundEnded);
+    socket.on("roundStarted", handleRoundStarted);
+    socket.on("gameEnded", handleGameEnded);
+    socket.on("playerLeft", handlePlayerLeft);
 
     return () => {
-      socket.off('timerUpdate');
-      socket.off('playerBuzzed');
-      socket.off('buzzVoteUpdated');
-      socket.off('voteTimeUpdate');
-      socket.off('buzzVoteEnded');
-      socket.off('playerDisabled');
-      socket.off('voteCancelled');
-      socket.off('codeUpdated');
-      socket.off('fixSubmitted');
-      socket.off('roundEnded');
-      socket.off('roundStarted');
-      socket.off('gameEnded');
-      socket.off('playerLeft');
+      socket.off("timerUpdate", handleTimerUpdate);
+      socket.off("playerBuzzed", handlePlayerBuzzed);
+      socket.off("fixSubmitted", handleFixSubmitted);
+      socket.off("roundEnded", handleRoundEnded);
+      socket.off("roundStarted", handleRoundStarted);
+      socket.off("gameEnded", handleGameEnded);
+      socket.off("playerLeft", handlePlayerLeft);
     };
-  }, [roomCode, playerId, navigate, room, code, playerName]);
+  }, [roomCode, playerId, playerName, navigate]);
 
   const getCurrentPlayer = () => {
     return room?.players.find((p) => p.id === playerId);
@@ -218,9 +159,10 @@ function Game() {
 
   const handleCodeChange = (newCode) => {
     setCode(newCode);
-    
-    if (getCurrentPlayer()?.role === 'bugger') {
-      socket.emit('submitBug', { buggedCode: newCode });
+    // Only bugger needs to update server state (debounced, not real-time — Yjs handles sync)
+    const currentPlayer = roomRef.current?.players.find((p) => p.id === playerId);
+    if (currentPlayer?.role === "bugger") {
+      debouncedSubmitBug(newCode);
     }
   };
 

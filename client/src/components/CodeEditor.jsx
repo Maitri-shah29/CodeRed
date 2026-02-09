@@ -1,7 +1,8 @@
-// CodeEditor component with simplified Yjs CRDT collaborative editing
+// CodeEditor component with Yjs CRDT collaborative editing via y-monaco
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import * as Y from 'yjs';
+import { MonacoBinding } from 'y-monaco';
 
 const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
 const WS_URL = SERVER_URL.replace('http://', 'ws://').replace('https://', 'wss://');
@@ -28,36 +29,30 @@ function CodeEditor({
   const ydocRef = useRef(null);
   const wsRef = useRef(null);
   const yTextRef = useRef(null);
-  const isLocalChangeRef = useRef(false);
-  const initialCodeRef = useRef(code); // Store initial code
+  const bindingRef = useRef(null);
+  const initialCodeRef = useRef(code);
+  const onChangeRef = useRef(onChange);
   
   const [locked, setLocked] = useState(false);
   const [connected, setConnected] = useState(false);
   const [remoteCursors, setRemoteCursors] = useState({});
 
-  // Update editor content from Yjs
-  const updateEditorContent = useCallback(() => {
-    if (editorRef.current && yTextRef.current) {
-      const newContent = yTextRef.current.toString();
-      const currentContent = editorRef.current.getValue();
-      
-      if (newContent !== currentContent) {
-        isLocalChangeRef.current = true;
-        const position = editorRef.current.getPosition();
-        editorRef.current.setValue(newContent);
-        if (position) {
-          editorRef.current.setPosition(position);
-        }
-        isLocalChangeRef.current = false;
-        
-        if (onChange) {
-          onChange(newContent);
-        }
-      }
-    }
-  }, [onChange]);
+  // Keep onChange ref current so the yText observer always calls the latest
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-  // Setup WebSocket connection for Yjs - only depends on roomCode, playerId, playerName, playerColor
+  // Helper: create or recreate the MonacoBinding when both editor and yText are ready
+  const ensureBinding = useCallback(() => {
+    if (editorRef.current && yTextRef.current) {
+      bindingRef.current?.destroy();
+      bindingRef.current = new MonacoBinding(
+        yTextRef.current,
+        editorRef.current.getModel(),
+        new Set([editorRef.current])
+      );
+    }
+  }, []);
+
+  // Setup Yjs doc, WebSocket, and MonacoBinding
   useEffect(() => {
     if (!roomCode) return;
 
@@ -66,11 +61,23 @@ function CodeEditor({
     const yText = ydoc.getText('code');
     yTextRef.current = yText;
 
-    // Initialize with code if provided
+    // Initialize with code if provided and yText is empty
     if (initialCodeRef.current && yText.length === 0) {
       yText.insert(0, initialCodeRef.current);
     }
 
+    // Notify parent component of any yText content change (local or remote)
+    const textObserver = () => {
+      if (onChangeRef.current) {
+        onChangeRef.current(yText.toString());
+      }
+    };
+    yText.observe(textObserver);
+
+    // Create MonacoBinding if editor is already mounted
+    ensureBinding();
+
+    // WebSocket connection for syncing Yjs updates across clients
     const wsUrl = `${WS_URL}/yjs/${roomCode}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -78,11 +85,7 @@ function CodeEditor({
     ws.onopen = () => {
       console.log('Yjs WebSocket connected');
       setConnected(true);
-      
-      // Request initial sync
       ws.send(JSON.stringify({ type: MSG_SYNC_REQUEST }));
-      
-      // Send awareness
       if (playerId) {
         ws.send(JSON.stringify({
           type: MSG_AWARENESS,
@@ -95,56 +98,26 @@ function CodeEditor({
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
         switch (data.type) {
           case MSG_SYNC_RESPONSE:
             if (data.state) {
-              const update = new Uint8Array(data.state);
-              Y.applyUpdate(ydoc, update);
-              // Update editor after applying sync
-              if (editorRef.current && yTextRef.current) {
-                const newContent = yTextRef.current.toString();
-                if (newContent && editorRef.current.getValue() !== newContent) {
-                  isLocalChangeRef.current = true;
-                  editorRef.current.setValue(newContent);
-                  isLocalChangeRef.current = false;
-                }
-              }
+              Y.applyUpdate(ydoc, new Uint8Array(data.state), 'remote');
             }
             break;
-          
           case MSG_UPDATE:
             if (data.update) {
-              const update = new Uint8Array(data.update);
-              Y.applyUpdate(ydoc, update);
-              // Update editor after applying update
-              if (editorRef.current && yTextRef.current) {
-                const newContent = yTextRef.current.toString();
-                if (editorRef.current.getValue() !== newContent) {
-                  isLocalChangeRef.current = true;
-                  const position = editorRef.current.getPosition();
-                  editorRef.current.setValue(newContent);
-                  if (position) editorRef.current.setPosition(position);
-                  isLocalChangeRef.current = false;
-                }
-              }
+              Y.applyUpdate(ydoc, new Uint8Array(data.update), 'remote');
             }
             break;
-          
           case MSG_AWARENESS:
             if (data.playerId && data.playerId !== playerId) {
-              setRemoteCursors(prev => ({
-                ...prev,
-                [data.playerId]: data.state
-              }));
+              setRemoteCursors(prev => ({ ...prev, [data.playerId]: data.state }));
             } else if (data.states) {
-              const filtered = Object.fromEntries(
-                Object.entries(data.states).filter(([id]) => id !== playerId)
+              setRemoteCursors(
+                Object.fromEntries(Object.entries(data.states).filter(([id]) => id !== playerId))
               );
-              setRemoteCursors(filtered);
             }
             break;
-            
           default:
             break;
         }
@@ -163,7 +136,7 @@ function CodeEditor({
       setConnected(false);
     };
 
-    // Listen for local document changes
+    // Send local Yjs updates over WebSocket to the server
     const updateHandler = (update, origin) => {
       if (origin !== 'remote' && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
@@ -175,38 +148,22 @@ function CodeEditor({
     ydoc.on('update', updateHandler);
 
     return () => {
+      yText.unobserve(textObserver);
       ydoc.off('update', updateHandler);
+      bindingRef.current?.destroy();
+      bindingRef.current = null;
       ws.close();
       ydoc.destroy();
+      ydocRef.current = null;
+      yTextRef.current = null;
     };
-  }, [roomCode, playerId, playerName, playerColor]); // Removed code and updateEditorContent
+  }, [roomCode, playerId, playerName, playerColor, ensureBinding]);
 
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-
-    // Set initial content from Yjs if available
-    if (yTextRef.current && yTextRef.current.length > 0) {
-      editor.setValue(yTextRef.current.toString());
-    }
-  };
-
-  const handleEditorChange = (value) => {
-    if (locked || isLocalChangeRef.current) return;
-    
-    if (yTextRef.current && ydocRef.current) {
-      const currentContent = yTextRef.current.toString();
-      if (value !== currentContent) {
-        ydocRef.current.transact(() => {
-          yTextRef.current.delete(0, yTextRef.current.length);
-          yTextRef.current.insert(0, value);
-        });
-      }
-    }
-    
-    if (onChange) {
-      onChange(value);
-    }
+    // Create MonacoBinding now that editor is ready (yText may already exist)
+    ensureBinding();
   };
 
   // Add decoration styles
@@ -366,7 +323,6 @@ function CodeEditor({
           language={language}
           defaultValue={code}
           onMount={handleEditorMount}
-          onChange={handleEditorChange}
           theme="vs-dark"
           options={{
             readOnly: readOnly || locked,
