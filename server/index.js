@@ -24,12 +24,10 @@ const io = new Server(server, {
   },
 });
 
-// Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Code validation endpoint
 const { validateCode } = require('./validation');
 const { codeSamples } = require('./gameState');
 
@@ -41,7 +39,6 @@ app.post('/validate', async (req, res) => {
       return res.status(400).json({ success: false, error: 'No code provided' });
     }
     
-    // Find test cases for the sample (or use default)
     let testCases = [];
     if (sampleId) {
       const sample = codeSamples.find(s => s.id === sampleId);
@@ -50,9 +47,7 @@ app.post('/validate', async (req, res) => {
       }
     }
     
-    // If no sample found, try to detect function and use generic tests
     if (testCases.length === 0) {
-      // Default empty test case list - validation will still check safety
       testCases = [];
     }
     
@@ -64,10 +59,8 @@ app.post('/validate', async (req, res) => {
   }
 });
 
-// Import gameState for admin routes
 const { getAllRooms, getRoomStats } = require("./gameState");
 
-// Admin: Get all active rooms
 app.get("/admin/rooms", (req, res) => {
   const rooms = getAllRooms();
   res.json({
@@ -91,7 +84,6 @@ app.get("/admin/rooms", (req, res) => {
   });
 });
 
-// Admin: Get server statistics
 app.get("/admin/stats", (req, res) => {
   const stats = getRoomStats();
   res.json({
@@ -102,7 +94,6 @@ app.get("/admin/stats", (req, res) => {
   });
 });
 
-// Admin: Get specific room details
 app.get("/admin/rooms/:roomCode", (req, res) => {
   const { getRoom } = require("./gameState");
   const room = getRoom(req.params.roomCode);
@@ -125,10 +116,8 @@ app.get("/admin/rooms/:roomCode", (req, res) => {
   });
 });
 
-// Setup socket event handlers
 setupSocketHandlers(io);
 
-// Setup Yjs WebSocket server for collaborative editing
 const { setupYjsServer } = require("./yjsServer");
 setupYjsServer(server);
 
@@ -139,7 +128,6 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`[SOCKET.IO] Ready for connections`);
 });
 
-// Graceful shutdown
 process.on("SIGTERM", () => {
   console.log("SIGTERM received, shutting down gracefully...");
   server.close(() => {

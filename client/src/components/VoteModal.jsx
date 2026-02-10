@@ -24,7 +24,6 @@ function VoteModal({
 }) {
   if (!isOpen || !voteData) return null;
 
-  // Filter out current player and disabled players from voting options
   const votablePlayers = players.filter(
     (p) => p.id !== currentPlayerId && !p.disabled,
   );

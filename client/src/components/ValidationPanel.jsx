@@ -1,4 +1,3 @@
-// ValidationPanel component - Cyberpunk themed test results display
 import React from 'react';
 import { Play, Check, X, AlertTriangle, Loader2, Terminal } from 'lucide-react';
 

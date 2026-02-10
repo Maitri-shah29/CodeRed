@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 function RoleReveal({ role, onComplete }) {
-  const [phase, setPhase] = useState('intro'); // intro, reveal, briefing, fade
+  const [phase, setPhase] = useState('intro');
   const onCompleteRef = useRef(onComplete);
-  
-  // Keep ref updated
+
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
@@ -12,7 +11,6 @@ function RoleReveal({ role, onComplete }) {
   const isBugger = role === 'bugger';
   
   useEffect(() => {
-    // Phase timing - run only once on mount
     const t1 = setTimeout(() => setPhase('reveal'), 1500);
     const t2 = setTimeout(() => setPhase('briefing'), 3000);
     const t3 = setTimeout(() => setPhase('fade'), 5000);
@@ -26,12 +24,10 @@ function RoleReveal({ role, onComplete }) {
       clearTimeout(t3);
       clearTimeout(t4);
     };
-  }, []); // Empty dependency - run only once
-
+  }, []); 
   return (
     <div className={`role-reveal-overlay ${phase}`}>
       <div className="role-reveal-container">
-        {/* Intro Phase */}
         {phase === 'intro' && (
           <div className="intro-text">
             <span className="glitch-text">ASSIGNING ROLE</span>
@@ -41,7 +37,6 @@ function RoleReveal({ role, onComplete }) {
           </div>
         )}
 
-        {/* Reveal Phase */}
         {(phase === 'reveal' || phase === 'briefing' || phase === 'fade') && (
           <div className={`role-card ${isBugger ? 'bugger' : 'debugger'}`}>
             <div className="role-icon">
@@ -54,7 +49,6 @@ function RoleReveal({ role, onComplete }) {
               {isBugger ? 'You are the Imposter' : 'You are a Crewmate'}
             </div>
             
-            {/* Briefing Phase */}
             {(phase === 'briefing' || phase === 'fade') && (
               <div className="mission-briefing">
                 <div className="briefing-title">MISSION BRIEFING</div>

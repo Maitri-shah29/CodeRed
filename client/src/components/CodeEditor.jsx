@@ -1,5 +1,3 @@
-// CodeEditor component with Yjs CRDT collaborative editing via y-monaco
-// Includes live remote cursors and "who is typing" name tags
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import * as Y from 'yjs';
@@ -8,7 +6,6 @@ import { MonacoBinding } from 'y-monaco';
 const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
 const WS_URL = SERVER_URL.replace('http://', 'ws://').replace('https://', 'wss://');
 
-// Message types (must match server)
 const MSG_SYNC_REQUEST = 0;
 const MSG_SYNC_RESPONSE = 1;
 const MSG_UPDATE = 2;
@@ -34,18 +31,16 @@ function CodeEditor({
   const bindingRef = useRef(null);
   const initialCodeRef = useRef(code);
   const onChangeRef = useRef(onChange);
-  const cursorDecorationsRef = useRef([]);   // Monaco decoration IDs for remote cursors
-  const cursorWidgetsRef = useRef(new Map()); // playerId -> content widget for name tags
-  const remoteCursorsRef = useRef({});        // latest remote cursor states
+  const cursorDecorationsRef = useRef([]);   
+  const cursorWidgetsRef = useRef(new Map());
+  const remoteCursorsRef = useRef({});
   
   const [locked, setLocked] = useState(false);
   const [connected, setConnected] = useState(false);
   const [remoteCursors, setRemoteCursors] = useState({});
 
-  // Keep onChange ref current so the yText observer always calls the latest
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-  // Helper: create or recreate the MonacoBinding when both editor and yText are ready
   const ensureBinding = useCallback(() => {
     if (editorRef.current && yTextRef.current) {
       bindingRef.current?.destroy();
@@ -57,7 +52,6 @@ function CodeEditor({
     }
   }, []);
 
-  // Render remote cursors as Monaco decorations + name-tag widgets
   const renderRemoteCursors = useCallback(() => {
     const editor = editorRef.current;
     const monaco = monacoRef.current;
@@ -66,7 +60,6 @@ function CodeEditor({
     const states = remoteCursorsRef.current;
     const newDecorations = [];
 
-    // Remove old name-tag widgets
     cursorWidgetsRef.current.forEach((widget) => {
       try { editor.removeContentWidget(widget); } catch (_) { /* ignore */ }
     });
@@ -78,7 +71,6 @@ function CodeEditor({
       const ln = cursor.lineNumber;
       const col = cursor.column;
 
-      // ── Cursor line decoration (thin colored bar) ──
       newDecorations.push({
         range: new monaco.Range(ln, col, ln, col),
         options: {
@@ -88,7 +80,6 @@ function CodeEditor({
         }
       });
 
-      // ── Selection highlight ──
       if (selection &&
           (selection.startLineNumber !== selection.endLineNumber ||
            selection.startColumn !== selection.endColumn)) {
@@ -104,7 +95,6 @@ function CodeEditor({
         });
       }
 
-      // ── Inject dynamic CSS for this cursor's color ──
       const styleId = `remote-cursor-style-${pid}`;
       let styleEl = document.getElementById(styleId);
       if (!styleEl) {
@@ -133,7 +123,6 @@ function CodeEditor({
         }
       `;
 
-      // ── Name-tag content widget ──
       const widgetId = `cursor-widget-${pid}`;
       const widget = {
         getId: () => widgetId,
@@ -173,14 +162,12 @@ function CodeEditor({
       cursorWidgetsRef.current.set(pid, widget);
     });
 
-    // Apply all decorations at once
     cursorDecorationsRef.current = editor.deltaDecorations(
       cursorDecorationsRef.current,
       newDecorations
     );
   }, []);
 
-  // Setup Yjs doc, WebSocket, and MonacoBinding
   useEffect(() => {
     if (!roomCode) return;
 
@@ -189,11 +176,6 @@ function CodeEditor({
     const yText = ydoc.getText('code');
     yTextRef.current = yText;
 
-    // Do NOT insert initial code here — the server's Yjs doc is the
-    // single source of truth and will send its state via MSG_SYNC_RESPONSE.
-    // Inserting locally causes duplicate content when multiple clients race.
-
-    // Notify parent component of any yText content change (local or remote)
     const textObserver = () => {
       if (onChangeRef.current) {
         onChangeRef.current(yText.toString());
@@ -201,10 +183,8 @@ function CodeEditor({
     };
     yText.observe(textObserver);
 
-    // Create MonacoBinding if editor is already mounted
     ensureBinding();
 
-    // WebSocket connection for syncing Yjs updates across clients
     const wsUrl = `${WS_URL}/yjs/${roomCode}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -239,7 +219,7 @@ function CodeEditor({
           case MSG_AWARENESS:
             if (data.playerId && data.playerId !== playerId) {
               if (data.state === null) {
-                // Player disconnected — remove their cursor
+
                 setRemoteCursors(prev => {
                   const next = { ...prev };
                   delete next[data.playerId];
@@ -285,7 +265,6 @@ function CodeEditor({
       setConnected(false);
     };
 
-    // Send local Yjs updates over WebSocket to the server
     const updateHandler = (update, origin) => {
       if (origin !== 'remote' && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
@@ -306,7 +285,6 @@ function CodeEditor({
       ydocRef.current = null;
       yTextRef.current = null;
 
-      // Clean up remote cursor decorations, widgets, and dynamic styles
       const editor = editorRef.current;
       if (editor) {
         cursorWidgetsRef.current.forEach((widget) => {
@@ -318,7 +296,6 @@ function CodeEditor({
           cursorDecorationsRef.current = [];
         }
       }
-      // Remove all injected remote-cursor style elements
       document.querySelectorAll('[id^="remote-cursor-style-"]').forEach(el => el.remove());
     };
   }, [roomCode, playerId, playerName, playerColor, ensureBinding, renderRemoteCursors]);
@@ -326,10 +303,8 @@ function CodeEditor({
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-    // Create MonacoBinding now that editor is ready (yText may already exist)
     ensureBinding();
 
-    // Send cursor position on every cursor change
     editor.onDidChangeCursorPosition((e) => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN && playerId) {
@@ -355,7 +330,6 @@ function CodeEditor({
       }
     });
 
-    // Also send on selection change (e.g. shift+arrow, mouse drag)
     editor.onDidChangeCursorSelection((e) => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN && playerId) {
@@ -382,7 +356,6 @@ function CodeEditor({
     });
   };
 
-  // Add decoration styles
   useEffect(() => {
     if (!document.getElementById('code-editor-decor')) {
       const style = document.createElement('style');

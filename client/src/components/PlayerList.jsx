@@ -1,4 +1,3 @@
-// PlayerList component
 import React from "react";
 
 function PlayerList({

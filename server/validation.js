@@ -1,7 +1,5 @@
-// Code validation module using Node.js vm for sandboxed execution
 const vm = require('vm');
 
-// Dangerous patterns to block
 const DANGEROUS_PATTERNS = [
   /\brequire\s*\(/,
   /\bimport\s+/,
@@ -19,7 +17,6 @@ const DANGEROUS_PATTERNS = [
   /\bWebSocket\b/,
 ];
 
-// Function name patterns to extract
 const FUNCTION_PATTERNS = [
   /function\s+(\w+)\s*\(/,
   /const\s+(\w+)\s*=\s*(?:function|\()/,
@@ -27,9 +24,6 @@ const FUNCTION_PATTERNS = [
   /var\s+(\w+)\s*=\s*(?:function|\()/,
 ];
 
-/**
- * Check if code contains a valid function definition
- */
 function extractFunctionName(code) {
   for (const pattern of FUNCTION_PATTERNS) {
     const match = code.match(pattern);
@@ -40,9 +34,6 @@ function extractFunctionName(code) {
   return null;
 }
 
-/**
- * Check code for dangerous patterns
- */
 function checkSafety(code) {
   const issues = [];
   
@@ -58,9 +49,6 @@ function checkSafety(code) {
   };
 }
 
-/**
- * Run code in sandbox and execute test cases
- */
 async function runTestCases(code, functionName, testCases) {
   const results = [];
 
@@ -108,11 +96,7 @@ async function runTestCases(code, functionName, testCases) {
   return results;
 }
 
-/**
- * Main validation function
- */
 async function validateCode(code, testCases) {
-  // Step 1: Check if code has a function
   const functionName = extractFunctionName(code);
   if (!functionName) {
     return {
@@ -123,7 +107,6 @@ async function validateCode(code, testCases) {
     };
   }
   
-  // Step 2: Safety checks
   const safetyCheck = checkSafety(code);
   if (!safetyCheck.safe) {
     return {
@@ -134,7 +117,6 @@ async function validateCode(code, testCases) {
     };
   }
   
-  // Step 3: Run test cases
   try {
     const results = await runTestCases(code, functionName, testCases);
     const allPassed = results.every(r => r.passed);
@@ -159,11 +141,7 @@ async function validateCode(code, testCases) {
   }
 }
 
-/**
- * Optimize class-based validation for Scientific Calculator
- */
 async function validateCalculatorCode(code, testCases) {
-  // Use existing safety check
   const safetyCheck = checkSafety(code);
   
   if (!safetyCheck.safe) {
@@ -179,26 +157,21 @@ async function validateCalculatorCode(code, testCases) {
   let allPassed = true;
 
   try {
-    // Create a sandbox with necessary globals
     const sandbox = { Math, Error, JSON, console: { log: () => {} } };
     const context = vm.createContext(sandbox);
 
-    // 1. Run user code (class definition)
     vm.runInContext(code, context, { timeout: 2000 });
 
-    // 2. Check if class exists
     const exists = vm.runInContext('typeof ScientificCalculator !== "undefined"', context, { timeout: 500 });
     if (!exists) {
       throw new Error('ScientificCalculator class not defined');
     }
 
-    // 3. Run test cases — each gets a fresh instance
     for (const test of testCases) {
       const { method, args, expected } = test;
       const argsJson = JSON.stringify(args);
 
       try {
-        // Create fresh instance + run test in one go
         const testCode = `
           (function() {
             try {

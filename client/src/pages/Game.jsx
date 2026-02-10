@@ -23,13 +23,11 @@ function Game() {
   const [feedback, setFeedback] = useState(null);
   const [showRoleReveal, setShowRoleReveal] = useState(true);
 
-  // Refs for values that change often but are read inside event handlers
   const codeRef = useRef(code);
   const roomRef = useRef(room);
   useEffect(() => { codeRef.current = code; }, [code]);
   useEffect(() => { roomRef.current = room; }, [room]);
 
-  // Debounced submitBug — only for server state tracking, not real-time sync
   const submitBugTimerRef = useRef(null);
   const debouncedSubmitBug = useCallback((newCode) => {
     if (submitBugTimerRef.current) clearTimeout(submitBugTimerRef.current);
@@ -38,12 +36,11 @@ function Game() {
     }, 500);
   }, []);
 
-  // Initialize code from room on first render
   useEffect(() => {
     if (room?.currentCode) {
       setCode(room.currentCode.initialBuggyCode || room.currentCode.correctCode);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!roomCode || !playerId) {
@@ -51,7 +48,6 @@ function Game() {
       return;
     }
 
-    // Make socket available to CodeEditor
     window.gameSocket = socket;
 
     const handleTimerUpdate = ({ remaining }) => {
@@ -62,7 +58,6 @@ function Game() {
       setBuzzedPlayerName(buzzerName);
       setBuzzedPlayerId(buzzerId);
       
-      // Show vote modal for ALL players
       if (vote) {
         setVoteData(vote);
         setShowVoteModal(true);
@@ -153,7 +148,6 @@ function Game() {
       socket.off("buzzVoteUpdated", handleBuzzVoteUpdated);
       socket.off("buzzVoteEnded", handleBuzzVoteEnded);
       
-      // Cleanup global socket reference
       if (window.gameSocket) {
         delete window.gameSocket;
       }
@@ -196,7 +190,6 @@ function Game() {
 
   const handleCodeChange = (newCode) => {
     setCode(newCode);
-    // Only bugger needs to update server state (debounced, not real-time — Yjs handles sync)
     const currentPlayer = roomRef.current?.players.find((p) => p.id === playerId);
     if (currentPlayer?.role === "bugger") {
       debouncedSubmitBug(newCode);
@@ -251,7 +244,6 @@ function Game() {
   const isDisabled = currentPlayer?.disabled;
   const canBuzz = !isBugger && !buzzedPlayerName && !isDisabled;
   
-  // Get bug assignment for current debugger (bugAssignments is now a plain object)
   const myBugAssignment = room.currentCode?.bugAssignments?.[playerId];
   const bugsList = myBugAssignment ? [
     { 
@@ -412,7 +404,6 @@ function Game() {
         </div>
       )}
 
-      {/* Vote Modal Component */}
       <VoteModal
         isOpen={showVoteModal}
         voteData={voteData}
@@ -426,7 +417,6 @@ function Game() {
         onSkipVote={handleSkipVote}
       />
 
-      {/* Feedback */}
       {feedback && (
         <div className={`feedback ${feedback.isCorrect ? 'success' : 'error'}`}>
           <div className="feedback-title">

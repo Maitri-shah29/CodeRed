@@ -1,4 +1,3 @@
-// Buzzer component
 import React, { useState } from 'react';
 
 function Buzzer({ onBuzz, disabled = false, buzzedPlayer = null }) {

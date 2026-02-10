@@ -1,4 +1,3 @@
-// Result page - Cyberpunk Neon UI
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Trophy, RotateCcw, DoorOpen } from 'lucide-react';

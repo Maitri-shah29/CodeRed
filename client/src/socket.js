@@ -1,11 +1,9 @@
-// Socket.IO client setup
 import { io } from 'socket.io-client';
 
 const SOCKET_URL = process.env.REACT_APP_SERVER_URL;
 console.log(SOCKET_URL)
 console.log(process.env.REACT_APP_SERVER_URL)
 
-// Create socket instance
 const socket = io(SOCKET_URL, {
   autoConnect: false,
   reconnection: true,
@@ -13,7 +11,6 @@ const socket = io(SOCKET_URL, {
   reconnectionAttempts: 5
 });
 
-// Connection event handlers
 socket.on('connect', () => {
   console.log('Connected to server:', socket.id);
 });

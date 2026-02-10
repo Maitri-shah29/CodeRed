@@ -21,8 +21,7 @@ function Landing() {
 
   useEffect(() => {
     socket.connect();
-    
-    // Random glitch effect
+
     const glitchInterval = setInterval(() => {
       setGlitchActive(true);
       setTimeout(() => setGlitchActive(false), 200);
@@ -42,7 +41,6 @@ function Landing() {
     setError('');
     socket.emit('createRoom', { playerName: playerName.trim() }, (response) => {
       if (response.success) {
-        // Cache for recovery
         localStorage.setItem('codeRed_roomCode', response.roomCode);
         localStorage.setItem('codeRed_playerId', response.playerId);
         localStorage.setItem('codeRed_playerName', playerName.trim());
@@ -82,7 +80,6 @@ function Landing() {
       (response) => {
         setIsJoining(false);
         if (response.success) {
-          // Cache for recovery
           localStorage.setItem('codeRed_roomCode', roomCode.toUpperCase());
           localStorage.setItem('codeRed_playerId', response.playerId);
           localStorage.setItem('codeRed_playerName', playerName.trim());
@@ -105,7 +102,6 @@ function Landing() {
 
   return (
     <div className="landing-page">
-      {/* Floating Shapes */}
       {floatingShapesRef.current.map((shape, index) => (
         <div
           key={index}
@@ -123,15 +119,12 @@ function Landing() {
         </div>
       ))}
 
-      {/* System Status Badge */}
       <div className="system-status">
         <span className="status-square">■</span>
         SYSTEM ONLINE
       </div>
 
-      {/* Main Content */}
       <div className="main-content">
-        {/* Logo Section */}
         <div className="logo-section">
           <h1 className={`logo ${glitchActive ? 'logo-glitch' : ''}`}>
             CODE<span className="logo-red">RED</span>
@@ -146,7 +139,6 @@ function Landing() {
           <p className="tagline">COMPETITIVE CODING ARENA</p>
         </div>
 
-        {/* Action Buttons */}
         <div className="button-container">
           <button 
             className="create-button"
@@ -162,18 +154,15 @@ function Landing() {
           </button>
         </div>
 
-        {/* Pixel Art Icon */}
         <div className="pixel-icon">
           <div className="pixel-icon-inner">⚠</div>
         </div>
 
-        {/* Semicolon Tagline */}
         <p className="semicolon-text">
           WHERE EVERY <span className="semicolon-highlight">;</span> COUNTS
         </p>
       </div>
 
-      {/* Create Room Modal */}
       {showCreateModal && (
         <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -202,7 +191,6 @@ function Landing() {
         </div>
       )}
 
-      {/* Join Room Modal */}
       {showJoinModal && (
         <div className="modal-overlay" onClick={() => setShowJoinModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -244,7 +232,6 @@ function Landing() {
         </div>
       )}
 
-      {/* Styles */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 

@@ -25,11 +25,10 @@ const {
 const { initializeRoomCode, getCurrentCode, cleanupRoom } = require('./yjsServer');
 const { validateCalculatorCode } = require('./validation');
 
-// Track socket to player/room mappings
 const socketToPlayer = new Map();
 const playerToSocket = new Map();
 const buzzVoteTimers = new Map();
-const roundTimers = new Map(); // Store round timer intervals
+const roundTimers = new Map();
 
 /**
  * Setup all socket event handlers
@@ -38,7 +37,6 @@ function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
     console.log(`Client connected: ${socket.id}`);
 
-    // CREATE ROOM
     socket.on("createRoom", ({ playerName }, callback) => {
       if (!isValidPlayerName(playerName)) {
         return callback({ success: false, error: "Invalid player name" });
@@ -49,7 +47,6 @@ function setupSocketHandlers(io) {
 
       const room = createRoom(roomCode, playerId, playerName);
 
-      // Track mappings
       socketToPlayer.set(socket.id, { playerId, roomCode });
       playerToSocket.set(playerId, socket.id);
 
@@ -65,7 +62,6 @@ function setupSocketHandlers(io) {
       console.log(`Room created: ${roomCode} by ${playerName}`);
     });
 
-    // JOIN ROOM
     socket.on("joinRoom", ({ roomCode, playerName }, callback) => {
       if (!isValidPlayerName(playerName)) {
         return callback({ success: false, error: "Invalid player name" });
@@ -83,7 +79,6 @@ function setupSocketHandlers(io) {
         return callback({ success: false, error: result.error });
       }
 
-      // Track mappings
       socketToPlayer.set(socket.id, { playerId, roomCode });
       playerToSocket.set(playerId, socket.id);
 
@@ -98,13 +93,11 @@ function setupSocketHandlers(io) {
         room: serialized
       });
 
-      // Notify others in room
       socket.to(roomCode).emit("playerJoined", {
         player: result.players.get(playerId),
         room: serialized
       });
 
-      // System message for chat
       socket.to(roomCode).emit('chatMessage', {
         username: 'System',
         message: `${playerName} joined the lobby`,
@@ -114,7 +107,6 @@ function setupSocketHandlers(io) {
       console.log(`${playerName} joined room ${roomCode}`);
     });
 
-    // PLAYER READY
     socket.on("playerReady", (callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -135,7 +127,6 @@ function setupSocketHandlers(io) {
       }
     });
 
-    // CHAT MESSAGE
     socket.on('chatMessage', ({ message }, callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -146,7 +137,6 @@ function setupSocketHandlers(io) {
 
       const player = room.players.get(playerId);
       if (player && message.trim()) {
-        // Broadcast to everyone EXCEPT the sender (sender adds locally)
         socket.to(roomCode).emit('chatMessage', {
           username: player.name,
           message: message.trim(),
@@ -157,7 +147,6 @@ function setupSocketHandlers(io) {
       }
     });
 
-    // START GAME
     socket.on("startGame", (callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -179,8 +168,6 @@ function setupSocketHandlers(io) {
         return callback({ success: false, error: result.error });
       }
 
-      // Initialize Yjs doc BEFORE emitting gameStarted so clients get
-      // the correct content when they connect their WebSocket
       if (result.currentCode) {
         initializeRoomCode(roomCode, result.currentCode.initialBuggyCode);
       }
@@ -189,14 +176,12 @@ function setupSocketHandlers(io) {
         room: serializeRoom(result),
       });
 
-      // Start round timer
       startRoundTimer(io, roomCode);
 
       callback({ success: true });
       console.log(`Game started in room ${roomCode}`);
     });
 
-    // BUZZ
     socket.on("buzz", (callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -211,24 +196,20 @@ function setupSocketHandlers(io) {
       if (result) {
         const player = result.players.get(playerId);
 
-        // Pause the game timer
         pauseRoundTimer(io, roomCode);
 
-        // Notify that player buzzed and vote started
         io.to(roomCode).emit("playerBuzzed", {
           playerId,
           playerName: player.name,
           vote: serializeBuzzVote(result.activeVote),
         });
 
-        // Start buzz vote timer
         startBuzzVoteTimer(io, roomCode);
 
         callback({ success: true });
       }
     });
 
-    // CAST BUZZ VOTE - Vote for any player to kick or skip
     socket.on("castBuzzVote", ({ targetPlayerId }, callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) {
@@ -246,20 +227,16 @@ function setupSocketHandlers(io) {
 
       const room = getRoom(roomCode);
 
-      // Broadcast vote update
       io.to(roomCode).emit("buzzVoteUpdated", {
         vote: serializeBuzzVote(room.activeVote),
       });
 
-      // Check if all enabled players have voted
       if (result.allVoted) {
-        // All legal voters have voted, end immediately
         clearTimeout(buzzVoteTimers.get(roomCode));
         handleBuzzVoteEnd(io, roomCode);
       }
     });
 
-    // SUBMIT FIX
     socket.on("submitFix", ({ fixedCode }, callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -286,16 +263,13 @@ function setupSocketHandlers(io) {
         bugDescription: "Code submitted for review",
       });
 
-      // Clear buzzed player
       room.buzzedPlayer = null;
 
-      // End round after fix submission
       setTimeout(() => {
         handleEndRound(io, roomCode);
       }, 3000);
     });
 
-    // SUBMIT BUG (from bugger) — updates server state only, Yjs handles real-time sync
     socket.on("submitBug", ({ buggedCode }, callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -308,14 +282,11 @@ function setupSocketHandlers(io) {
         return;
       }
 
-      // Update server-side game state (used for fix validation)
       room.currentCode.buggedCode = buggedCode;
 
       if (callback) callback({ success: true });
-      // NOTE: No codeUpdated broadcast — Yjs WebSocket handles real-time sync
     });
 
-    // VALIDATE BUG FIX
     socket.on("validateBugFix", async ({ code }, callback) => {
        const playerData = socketToPlayer.get(socket.id);
        if (!playerData) return callback({ success: false, error: 'Not in a room' });
@@ -325,14 +296,12 @@ function setupSocketHandlers(io) {
        
        if (!room) return callback({ success: false, error: 'Room not found' });
        
-       // Get assignment
        let method = null;
        if (room.currentCode && room.currentCode.bugAssignments) {
          const bugAssignment = room.currentCode.bugAssignments.get(playerId);
          if (bugAssignment) {
             method = bugAssignment.method;
             if (!method) {
-               // Fallback mapping
                const bugIdToMethod = {
                   'bug1': 'subtract',
                   'bug2': 'increment',
@@ -346,8 +315,6 @@ function setupSocketHandlers(io) {
        }
 
        if (!method) {
-          // If debugging without assignment, maybe validate everything?
-          // Or return error if strict assignment required.
           console.log(`Player ${playerId} has no bug assignment or method invalid`);
        }
 
@@ -374,7 +341,6 @@ function setupSocketHandlers(io) {
        console.log(`[Validation] Room ${roomCode}, Player ${playerId}. TestCases applied: ${testCases.length}`);
        console.log(`[Validation] Using fallback? ${room.currentCode?.testCases?.length ? 'No' : 'Yes'}`);
 
-       // Run validation
        const validation = await validateCalculatorCode(code, testCases);
        console.log(`[Validation] Result: success=${validation.success}, allPassed=${validation.allPassed}, results=${validation.results?.length}`);
        
@@ -385,14 +351,12 @@ function setupSocketHandlers(io) {
           });
        }
 
-       // Check specific assignment
        let assignedFixed = false;
        if (method) {
          const assignedResult = validation.results.find(r => r.method === method);
          assignedFixed = assignedResult ? assignedResult.passed : false;
        }
        
-       // Check if ALL tests passed
        const allPassed = validation.allPassed;
 
        callback({
@@ -407,7 +371,6 @@ function setupSocketHandlers(io) {
        });
     });
 
-    // CURSOR UPDATE (broadcast cursor position to other players)
     socket.on('cursorUpdate', ({ position }) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -416,16 +379,13 @@ function setupSocketHandlers(io) {
       const room = getRoom(roomCode);
       if (!room) return;
 
-      // Get player info for color assignment
       const player = room.players.get(playerId);
       if (!player) return;
 
-      // Find player index for color
       const playerIndex = Array.from(room.players.keys()).indexOf(playerId);
       const colors = ['#00ddff', '#00ff88', '#dd00ff', '#ffcc00', '#ff9900', '#ff3366'];
       const playerColor = colors[playerIndex % colors.length];
 
-      // Broadcast cursor position to all other players
       socket.to(roomCode).emit('cursorMoved', {
         playerId,
         playerName: player.name,
@@ -434,7 +394,6 @@ function setupSocketHandlers(io) {
       });
     });
 
-    // NEXT ROUND (after results shown)
     socket.on("nextRound", () => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -451,7 +410,6 @@ function setupSocketHandlers(io) {
       }
     });
 
-    // PLAY AGAIN
     socket.on("playAgain", (callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) return;
@@ -468,7 +426,6 @@ function setupSocketHandlers(io) {
       }
     });
 
-    // LEAVE ROOM
     socket.on("leaveRoom", (callback) => {
       const playerData = socketToPlayer.get(socket.id);
       if (!playerData) {
@@ -479,7 +436,6 @@ function setupSocketHandlers(io) {
       const { playerId, roomCode } = playerData;
       const room = getRoom(roomCode);
 
-      // If leaving player was in an active vote, cancel the vote
       if (room && room.activeVote) {
         clearTimeout(buzzVoteTimers.get(roomCode));
         clearBuzzVote(roomCode);
@@ -496,7 +452,6 @@ function setupSocketHandlers(io) {
           room: serializeRoom(updatedRoom),
         });
 
-        // System message for chat
         io.to(roomCode).emit('chatMessage', {
           username: 'System',
           message: 'A player left the room',
@@ -504,7 +459,6 @@ function setupSocketHandlers(io) {
         });
       }
 
-      // Clean up socket mappings
       socketToPlayer.delete(socket.id);
       playerToSocket.delete(playerId);
 
@@ -513,7 +467,6 @@ function setupSocketHandlers(io) {
       if (callback) callback({ success: true });
     });
 
-    // DISCONNECT
     socket.on("disconnect", () => {
       const playerData = socketToPlayer.get(socket.id);
 
@@ -521,7 +474,6 @@ function setupSocketHandlers(io) {
         const { playerId, roomCode } = playerData;
         const room = getRoom(roomCode);
 
-        // If disconnecting player was in an active vote, cancel the vote
         if (room && room.activeVote) {
           clearTimeout(buzzVoteTimers.get(roomCode));
           clearBuzzVote(roomCode);
@@ -538,14 +490,12 @@ function setupSocketHandlers(io) {
             room: serializeRoom(updatedRoom),
           });
 
-          // System message for chat
           io.to(roomCode).emit('chatMessage', {
             username: 'System',
             message: 'A player left the lobby',
             color: '#ff3366'
           });
 
-          // System message for chat
           io.to(roomCode).emit('chatMessage', {
             username: 'System',
             message: 'A player left the lobby',
@@ -562,14 +512,10 @@ function setupSocketHandlers(io) {
   });
 }
 
-/**
- * Start round timer
- */
 function startRoundTimer(io, roomCode) {
   const room = getRoom(roomCode);
   if (!room) return;
 
-  // Clear any existing timer
   if (roundTimers.has(roomCode)) {
     clearInterval(roundTimers.get(roomCode));
   }
@@ -582,7 +528,6 @@ function startRoundTimer(io, roomCode) {
       return;
     }
 
-    // Skip if timer is paused
     if (room.timerPaused) {
       return;
     }
@@ -602,14 +547,10 @@ function startRoundTimer(io, roomCode) {
   roundTimers.set(roomCode, timer);
 }
 
-/**
- * Pause round timer
- */
 function pauseRoundTimer(io, roomCode) {
   const room = getRoom(roomCode);
   if (!room || room.timerPaused) return;
 
-  // Calculate and store remaining time
   const elapsed = Math.floor((Date.now() - room.roundStartTime) / 1000);
   const remaining = room.roundDuration - elapsed;
   
@@ -619,21 +560,16 @@ function pauseRoundTimer(io, roomCode) {
   console.log(`Timer paused in room ${roomCode}, remaining: ${room.pausedTimeRemaining}s`);
 }
 
-/**
- * Resume round timer
- */
 function resumeRoundTimer(io, roomCode) {
   const room = getRoom(roomCode);
   if (!room || !room.timerPaused) return;
 
-  // Reset start time based on paused remaining time
   room.roundStartTime = Date.now() - ((room.roundDuration - room.pausedTimeRemaining) * 1000);
   room.timerPaused = false;
   delete room.pausedTimeRemaining;
   
   console.log(`Timer resumed in room ${roomCode}`);
   
-  // Emit immediate update
   const elapsed = Math.floor((Date.now() - room.roundStartTime) / 1000);
   const remaining = room.roundDuration - elapsed;
   io.to(roomCode).emit("timerUpdate", { remaining });
@@ -643,7 +579,6 @@ function resumeRoundTimer(io, roomCode) {
  * Handle end of round
  */
 function handleEndRound(io, roomCode) {
-  // Get the final code from Yjs
   const finalCode = getCurrentCode(roomCode);
   
   const room = endRound(roomCode, finalCode);
@@ -657,7 +592,6 @@ function handleEndRound(io, roomCode) {
       winner: room.winner || null,
       reason: room.winReason || "Game completed",
     });
-    // Clean up Yjs document
     cleanupRoom(roomCode);
   } else {
     // Next round
@@ -665,9 +599,7 @@ function handleEndRound(io, roomCode) {
       room: serializeRoom(room),
     });
 
-    // Start next round after brief delay
     setTimeout(() => {
-      // Initialize Yjs doc with the new round's code
       if (room.currentCode) {
         initializeRoomCode(roomCode, room.currentCode.initialBuggyCode);
       }
@@ -681,9 +613,6 @@ function handleEndRound(io, roomCode) {
   }
 }
 
-/**
- * Serialize buzz vote for client
- */
 function serializeBuzzVote(vote) {
   if (!vote) return null;
 
@@ -703,28 +632,22 @@ function serializeBuzzVote(vote) {
   };
 }
 
-/**
- * Start buzz vote timer - automatically ends vote after duration
- */
 function startBuzzVoteTimer(io, roomCode) {
   const room = getRoom(roomCode);
   if (!room || !room.activeVote) return;
 
   const duration = room.activeVote.duration || 60000;
 
-  // Clear any existing timer
   if (buzzVoteTimers.has(roomCode)) {
     clearTimeout(buzzVoteTimers.get(roomCode));
   }
 
-  // Store timer ID so we can clear it later
   const timerId = setTimeout(() => {
     handleBuzzVoteEnd(io, roomCode);
   }, duration);
 
   buzzVoteTimers.set(roomCode, timerId);
 
-  // Send periodic countdown updates
   const updateInterval = setInterval(() => {
     const room = getRoom(roomCode);
     if (!room || !room.activeVote) {
@@ -743,14 +666,10 @@ function startBuzzVoteTimer(io, roomCode) {
   }, 1000);
 }
 
-/**
- * Handle end of buzz vote - process result and kick player if needed
- */
 function handleBuzzVoteEnd(io, roomCode) {
   const room = getRoom(roomCode);
   if (!room || !room.activeVote) return;
 
-  // Get vote results
   const voteResult = getBuzzVoteResult(room);
 
   if (!voteResult) return;
@@ -793,17 +712,14 @@ function handleBuzzVoteEnd(io, roomCode) {
 
   // Check if there's a clear majority
   if (!hasClearMajority) {
-    // No clear majority - game continues without disabling anyone
     console.log(
       `No clear majority in room ${roomCode}. Votes: ${JSON.stringify(voteCount)}, Skips: ${skipCount}`,
     );
 
-    // Clear the vote and allow next buzz
     room.buzzedPlayer = null;
     clearBuzzVote(roomCode);
     buzzVoteTimers.delete(roomCode);
     
-    // Resume the game timer
     resumeRoundTimer(io, roomCode);
     
     io.to(roomCode).emit("buzzVoteEnded", {
@@ -814,7 +730,6 @@ function handleBuzzVoteEnd(io, roomCode) {
     return;
   }
 
-  // There is a clear majority - disable the player
   const player = room.players.get(playerToKick);
   if (player) {
     player.disabled = true;
@@ -824,14 +739,12 @@ function handleBuzzVoteEnd(io, roomCode) {
     `Player ${kickedPlayerName} was disabled in room ${roomCode} with ${maxVotes} votes`,
   );
 
-  // Notify all players about disabled player
   io.to(roomCode).emit("playerDisabled", {
     playerId: playerToKick,
     playerName: kickedPlayerName,
     room: serializeRoom(room),
   });
 
-  // Check if debuggers won (bugger was voted out)
   if (buggerVotedOut) {
     console.log(`Bugger was voted out in room ${roomCode}! Debuggers win!`);
     room.gameState = "results";
@@ -845,7 +758,6 @@ function handleBuzzVoteEnd(io, roomCode) {
     return;
   }
 
-  // Check if buggers won
   if (checkBuggerWin(room)) {
     console.log(`Buggers won in room ${roomCode}!`);
     room.gameState = "results";
@@ -859,12 +771,10 @@ function handleBuzzVoteEnd(io, roomCode) {
     return;
   }
 
-  // Clear the buzzer and vote for next buzz
   room.buzzedPlayer = null;
   clearBuzzVote(roomCode);
   buzzVoteTimers.delete(roomCode);
   
-  // Resume the game timer
   resumeRoundTimer(io, roomCode);
   
   io.to(roomCode).emit("buzzVoteEnded", {
@@ -874,16 +784,12 @@ function handleBuzzVoteEnd(io, roomCode) {
   });
 }
 
-/**
- * Serialize room for client
- */
 function serializeRoom(room) {
   if (!room) {
     console.error('serializeRoom called with null/undefined room');
     return null;
   }
 
-  // Convert bugAssignments Map to a plain object for serialization
   let currentCodeSerialized = room.currentCode;
   if (room.currentCode && room.currentCode.bugAssignments) {
     currentCodeSerialized = {

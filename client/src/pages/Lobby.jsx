@@ -39,8 +39,6 @@ const ROLES_INFO = [
   },
 ];
 
-/* ---------------- Helpers ---------------- */
-
 function normalizeRoom(room) {
   if (!room) return null;
 
@@ -63,8 +61,6 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/* ---------------- Component ---------------- */
-
 export default function GameLobby() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -75,7 +71,7 @@ export default function GameLobby() {
     { type: "circle", x: 18, y: 45, duration: 22 },
   ]);
 
-  // State from location
+
   const [roomCode] = useState(location.state?.roomCode);
   const [room, setRoom] = useState(location.state?.room || null);
   const [playerId, setPlayerId] = useState(
@@ -85,10 +81,9 @@ export default function GameLobby() {
     location.state?.playerName || localStorage.getItem("codeRed_playerName"),
   );
 
-  // Refs to avoid stale closures and prevent effect re-runs
-  const playerIdRef = useRef(playerId);
+const playerIdRef = useRef(playerId);
   const playerNameRef = useRef(playerName);
-  const hasJoinedRef = useRef(true); // true because Landing already joined
+  const hasJoinedRef = useRef(true);
 
   // Keep refs in sync with state
   useEffect(() => { playerIdRef.current = playerId; }, [playerId]);
@@ -101,8 +96,6 @@ export default function GameLobby() {
   const [startLoading, setStartLoading] = useState(false);
   const [connected, setConnected] = useState(socket.connected);
   const [error, setError] = useState("");
-
-  /* ---------------- Derived State ---------------- */
 
   const players = useMemo(() => {
     if (!room?.players) return [];
@@ -121,12 +114,8 @@ export default function GameLobby() {
   const isHost = me?.isHost === true;
 
   const readyCount = players.filter((p) => p.isReady).length;
-  // const allPlayersReady = players.length >= 2 && players.every((p) => p.isReady); // Min 2 players logic
   const allPlayersReady = players.length > 0 && players.every((p) => p.isReady);
 
-  /* ---------------- Socket Lifecycle ---------------- */
-
-  // Intercept browser back navigation and trigger exit logic
   useEffect(() => {
     const onPopState = (e) => {
       e.preventDefault();
@@ -218,8 +207,6 @@ export default function GameLobby() {
     };
   }, [navigate, roomCode, playerId, playerName]);
 
-  /* ---------------- Actions ---------------- */
-
   const handleToggleReady = () => {
     if (readyLoading) return;
     setReadyLoading(true);
@@ -245,7 +232,6 @@ export default function GameLobby() {
   const sendMessage = () => {
     if (!message.trim()) return;
     
-    // Add own message locally (server won't echo it back to sender)
     const chatMsg = {
       username: playerName,
       message: message.trim(),
@@ -288,8 +274,6 @@ export default function GameLobby() {
     );
   }
 
-  /* ---------------- Render ---------------- */
-
   return (
     <div className="game-lobby">
       {floatingShapesRef.current.map((shape, index) => (
@@ -318,7 +302,6 @@ export default function GameLobby() {
         </div>
       )}
 
-      {/* Header */}
       <header className="lobby-header">
         <div className="logo">
           <span className="dev">CODE</span>
@@ -357,9 +340,7 @@ export default function GameLobby() {
         </div>
       </header>
 
-      {/* Main Container */}
       <div className="lobby-container">
-        {/* Players Panel */}
         <div className="players-panel">
           <div className="panel-header">
             <h2>
@@ -400,7 +381,6 @@ export default function GameLobby() {
               </div>
             ))}
 
-            {/* Empty slots */}
             {Array.from({ length: Math.max(0, 3 - players.length) }).map((_, idx) => (
               <div key={`empty-${idx}`} className="waiting-indicator">
                 <div className="waiting-avatar"></div>
@@ -424,7 +404,6 @@ export default function GameLobby() {
           )}
         </div>
 
-        {/* Lobby Panel */}
         <div className="lobby-panel">
           <div className="lobby-title-section">
             <h1 className="lobby-title">LOBBY</h1>
@@ -513,7 +492,6 @@ export default function GameLobby() {
         </div>
       </div>
 
-      {/* Styles */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
