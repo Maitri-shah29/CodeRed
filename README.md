@@ -66,9 +66,6 @@ npm install
 cd client
 npm install
 ```
-
-**Note:** `node_modules` folders will be created separately in the `server/` and `client/` directories during installation. These folders are gitignored and not included in the zip file to keep the download size small.
-
 ## Running the Game
 
 ### Start the server
@@ -93,40 +90,4 @@ Client will run on `http://localhost:3000`
    - **Debuggers**: Watch the code, buzz when you spot a bug, fix it
    - **Bugger**: Introduce subtle bugs without being caught
 4. **Results**: See scores and play again
-
-## Game Rules
-
-- Debuggers earn points for correctly identifying and fixing bugs
-- Bugger earns points for bugs that go undetected
-- False buzzes result in point penalties
-- Roles rotate each round
-
-## Project Structure
-
-```
-CodeRed/
-├── server/                # Node.js backend
-│   ├── index.js          # Server entry point
-│   ├── gameState.js      # Game state management
-│   ├── socketHandlers.js # Socket event handlers
-│   ├── utils.js          # Helper functions
-│   ├── package.json      # Server dependencies
-│   └── node_modules/     # (Created after npm install)
-│
-├── client/               # React frontend
-│   ├── public/
-│   │   └── index.html
-│   ├── src/
-│   │   ├── pages/       # Main screens
-│   │   ├── components/  # Reusable components
-│   │   ├── socket.js    # Socket.IO setup
-│   │   ├── App.jsx      # Route controller
-│   │   └── index.js
-│   ├── package.json     # Client dependencies
-│   └── node_modules/    # (Created after npm install)
-│
-├── setup.sh             # Setup script for Mac/Linux
-├── setup.bat            # Setup script for Windows
-├── .gitignore
-└── README.md
-```
+S
